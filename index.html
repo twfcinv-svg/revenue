@@ -1,0 +1,80 @@
+
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>供應鏈月營收｜左側Treemap（按關係類型）＋右側清單</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- SheetJS for reading Excel -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- D3 for treemap -->
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+</head>
+<body>
+  <header class="page-header">
+    <h1>供應鏈月營收視圖</h1>
+    <p class="sub">左側：上游 Treemap（依關係類型分群＋熱力圖）。右側：下游清單（原樣不分群）。</p>
+  </header>
+
+  <section class="controls">
+    <div class="field">
+      <label for="stockInput">股票代號</label>
+      <input id="stockInput" type="text" placeholder="例如：2330" inputmode="numeric" />
+    </div>
+    <div class="field">
+      <label for="monthSelect">月份</label>
+      <select id="monthSelect"></select>
+    </div>
+    <div class="field">
+      <label for="metricSelect">指標</label>
+      <select id="metricSelect">
+        <option value="YoY">年成長 (YoY)</option>
+        <option value="MoM">月變動 (MoM)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="colorMode">顏色邏輯</label>
+      <select id="colorMode">
+        <option value="redPositive" selected>紅=好 / 綠=弱</option>
+        <option value="greenPositive">綠=好 / 紅=弱</option>
+      </select>
+    </div>
+    <button id="runBtn" class="primary">查詢</button>
+    <span id="status" class="status"></span>
+  </section>
+
+  <main class="layout">
+    <section class="column" id="upstreamCol">
+      <div class="section-head">
+        <h2>上游 Treemap（依關係類型）</h2>
+        <div class="legend">
+          <span class="chip pos-chip">表現佳</span>
+          <span class="chip neu-chip">中性</span>
+          <span class="chip neg-chip">表現弱</span>
+        </div>
+      </div>
+      <div id="treemapWrap" class="treemap-wrap">
+        <svg id="treemap" role="img" aria-label="上游關係類型熱力圖"></svg>
+      </div>
+      <div id="treemapHint" class="meta" style="margin-top:6px"></div>
+    </section>
+
+    <section class="column center" id="focusCol">
+      <h2>選定公司</h2>
+      <div id="focusCard" class="card focus"></div>
+    </section>
+
+    <section class="column" id="downstreamCol">
+      <h2>下游（清單）</h2>
+      <div class="list" id="downstreamList"></div>
+    </section>
+  </main>
+
+  <footer class="page-footer">
+    <p>資料來源：<code>data.xlsx</code>；工作表 <strong>Revenue</strong> / <strong>Links</strong>（<em>權重</em>已移除）。將本專案放到 GitHub Pages 即可。</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
