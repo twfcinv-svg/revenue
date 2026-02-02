@@ -1,5 +1,5 @@
 
-/* app.js hotfix — legend colors + group heat layer + single-line stock label */
+/* app.js — 單行標籤 + 查詢卡片變色 + 下載連結白色（請覆蓋既有檔案） */
 const URL_VER = new URLSearchParams(location.search).get('v') || Date.now();
 const XLSX_FILE = new URL(`data.xlsx?v=${URL_VER}`, location.href).toString();
 const REVENUE_SHEET='Revenue';
@@ -16,6 +16,8 @@ function colorFor(v, mode){ if(v==null||!isFinite(v)) return '#0f172a'; const t=
 function safe(s){ return z(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 window.addEventListener('DOMContentLoaded', async()=>{
+  // 下載連結白色 & 帶版本
+  const a=document.getElementById('dlData'); if(a){ a.href='data.xlsx?v='+URL_VER; a.style.color='#fff'; }
   try{ await loadWorkbook(); initControls(); }catch(e){ console.error(e); alert('載入失敗：'+e.message); }
   document.querySelector('#runBtn')?.addEventListener('click', handleRun);
 });
@@ -52,44 +54,54 @@ function handleRun(){
   const upstreamEdges=linksRows.filter(r=>normCode(r['下游代號'])===codeKey);
   const downstreamEdges=linksRows.filter(r=>normCode(r['上游代號'])===codeKey);
   const rowSelf=byCode.get(codeKey);
-  renderResultChip(rowSelf, month, metric);
+  renderResultChip(rowSelf, month, metric, colorMode); // 傳 colorMode 讓卡片變色
   renderTreemap('upTreemap','upHint', upstreamEdges,'上游代號',month,metric,colorMode);
   renderTreemap('downTreemap','downHint',downstreamEdges,'下游代號',month,metric,colorMode);
 }
 
-function renderResultChip(selfRow, month, metric){ const host=document.querySelector('#resultChip'); const v=getMetricValue(selfRow,month,metric); const cls=v==null?'':(v>=0?'good':'bad'); host.innerHTML=`<div class="result-card"><div class="row1"><strong>${safe(selfRow['個股'])}｜${safe(selfRow['名稱'])}</strong><span>${month.slice(0,4)}/${month.slice(4,6)} / ${metric}</span></div><div class="row2"><span>${safe(selfRow['產業別']||'')}</span><span class="${cls}">${displayPct(v)}</span></div></div>`; }
+function renderResultChip(selfRow, month, metric, colorMode){
+  const host=document.querySelector('#resultChip');
+  const v=getMetricValue(selfRow,month,metric);
+  const bg=colorFor(v, colorMode); // 依表現染色
+  host.innerHTML=`
+    <div class="result-card" style="background:${bg}">
+      <div class="row1"><strong>${safe(selfRow['個股'])}｜${safe(selfRow['名稱'])}</strong><span>${month.slice(0,4)}/${month.slice(4,6)} / ${metric}</span></div>
+      <div class="row2"><span>${safe(selfRow['產業別']||'')}</span><span>${displayPct(v)}</span></div>
+    </div>`;
+}
 
 function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode){
   const svg=d3.select('#'+svgId); svg.selectAll('*').remove(); const wrap=svg.node().parentElement; const W=wrap.clientWidth-16; const H=parseInt(getComputedStyle(svg.node()).height)||560; svg.attr('width',W).attr('height',H);
   const groups=new Map();
   for(const e of edges){ const rel=normText(e['關係類型']||'未分類'); const key=normCode(e[codeField]); const r=byCode.get(key); if(!r) continue; const v=getMetricValue(r,month,metric); if(v==null) continue; if(!groups.has(rel)) groups.set(rel,[]); groups.get(rel).push({ code:r['個股'], name:r['名稱'], value:v }); }
   const hint=document.getElementById(hintId); if(groups.size===0){ hint.textContent='此區在選定月份沒有可用數據'; return; } else { hint.textContent=''; }
-  const children=[]; for(const [rel,list] of groups){ const avg=d3.mean(list,d=>d.value); const kids=list.map(s=>({ name:`${s.code} ${s.name||''}`.trim(), code:s.code, value:Math.max(0.01,Math.abs(s.value)), raw:s.value })); children.push({ name:rel, avg, children:kids }); }
+  const children=[]; for(const [rel,list] of groups){ const avg=d3.mean(list,d=>d.value); // ⭐ keep pure name，不再把代號塞進 name
+    const kids=list.map(s=>({ name: s.name||'', code:s.code, value:Math.max(0.01,Math.abs(s.value)), raw:s.value }));
+    children.push({ name:rel, avg, children:kids }); }
   const root=d3.hierarchy({ children }).sum(d=>d.value).sort((a,b)=>(b.value||0)-(a.value||0));
-  d3.treemap().size([W,H]).paddingOuter(8).paddingInner(3).paddingTop(22)(root); // 預留抬頭空間
+  d3.treemap().size([W,H]).paddingOuter(8).paddingInner(3).paddingTop(22)(root);
 
   const g=svg.append('g');
 
-  // 先畫群組底色（依平均值）
+  // 群組底色（先畫）
   const parents=g.selectAll('g.parent').data(root.children||[]).enter().append('g').attr('class','parent');
-  parents.append('rect')
-    .attr('class','group-bg')
+  parents.append('rect').attr('class','group-bg')
     .attr('x',d=>d.x0).attr('y',d=>d.y0)
     .attr('width',d=>Math.max(0,d.x1-d.x0)).attr('height',d=>Math.max(0,d.y1-d.y0))
-    .attr('fill', d=> colorFor(d.data.avg, document.querySelector('#colorMode')?.value || 'redPositive'));
-  parents.append('rect')
-    .attr('class','group-border')
+    .attr('fill', d=> colorFor(d.data.avg, colorMode));
+  parents.append('rect').attr('class','group-border')
     .attr('x',d=>d.x0).attr('y',d=>d.y0)
     .attr('width',d=>Math.max(0,d.x1-d.x0)).attr('height',d=>Math.max(0,d.y1-d.y0));
-  parents.append('text')
-    .attr('class','node-title')
+  parents.append('text').attr('class','node-title')
     .attr('x', d=>d.x0+6).attr('y', d=>d.y0+16)
     .text(d=>`${d.data.name}  平均：${displayPct(d.data.avg)}`);
 
-  // 葉節點（個股）
+  // 葉節點（個股）— 單行：代號 中文名 數值
   const node=g.selectAll('g.node').data(root.leaves()).enter().append('g').attr('class','node').attr('transform',d=>`translate(${d.x0},${d.y0})`);
-  node.append('rect').attr('class','node-rect').attr('width',d=>Math.max(0,d.x1-d.x0)).attr('height',d=>Math.max(0,d.y1-d.y0)).attr('fill', d=> colorFor(d.data.raw, document.querySelector('#colorMode')?.value || 'redPositive'));
+  node.append('rect').attr('class','node-rect')
+    .attr('width',d=>Math.max(0,d.x1-d.x0)).attr('height',d=>Math.max(0,d.y1-d.y0))
+    .attr('fill', d=> colorFor(d.data.raw, colorMode));
   node.append('text').attr('class','node-line').attr('x',6).attr('y',16)
-    .text(d=>`${(d.data.code||'')} ${safe((d.data.name||''))} ${displayPct(d.data.raw)}`)
+    .text(d=>`${(d.data.code||'')} ${safe(d.data.name||'')} ${displayPct(d.data.raw)}`)
     .each(function(d){ const w=d.x1-d.x0; if(this.getBBox().width>w-8){ d3.select(this).attr('opacity',0.9).attr('font-size',10); }});
 }

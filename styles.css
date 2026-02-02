@@ -11,9 +11,10 @@ input,select,button{height:36px; padding:6px 10px; border-radius:8px; border:1px
 button.primary{background:var(--primary); border:none; color:white; font-weight:600; padding:0 14px; cursor:pointer}
 .status{display:none}
 .result-chip{display:flex; align-items:center; gap:12px; margin-left:auto}
-.result-card{background:var(--card); border:1px solid var(--border); border-radius:12px; padding:8px 12px; min-width:240px}
+.result-card{background:var(--card); border:1px solid var(--border); border-radius:12px; padding:8px 12px; min-width:260px}
 .result-card .row1{display:flex; justify-content:space-between; gap:8px}
 .result-card .row2{display:flex; justify-content:space-between; gap:8px; margin-top:4px; color:var(--muted)}
+.download-link{margin-left:12px; color:#ffffff; font-size:12px; text-decoration:none}
 .layout{display:grid; grid-template-columns:1fr 1fr; gap:16px; padding:16px}
 .section-head{display:flex; justify-content:space-between; align-items:center}
 .legend{display:flex; gap:6px; align-items:center}
