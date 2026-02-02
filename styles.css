@@ -1,5 +1,5 @@
 
-:root{ --bg:#0f1115; --panel:#151922; --muted:#9aa4b2; --text:#e6e9ef; --good:#ef4444; --bad:#10b981; --good2:#10b981; --bad2:#ef4444; --neutral:#94a3b8; --primary:#f97316; --chipbg:#0c1018; --card:#1a2030; --border:#22283a; }
+:root{ --bg:#0f1115; --panel:#151922; --muted:#9aa4b2; --text:#e6e9ef; --good:#ef4444; --bad:#10b981; --neutral:#94a3b8; --primary:#f97316; --chipbg:#0c1018; --card:#1a2030; --border:#22283a; }
 *{box-sizing:border-box}
 body{margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Noto Sans CJK TC",sans-serif; background:var(--bg); color:var(--text)}
 .page-header{padding:20px 16px 8px}
@@ -14,14 +14,18 @@ button.primary{background:var(--primary); border:none; color:white; font-weight:
 .result-card{background:var(--card); border:1px solid var(--border); border-radius:12px; padding:8px 12px; min-width:240px}
 .result-card .row1{display:flex; justify-content:space-between; gap:8px}
 .result-card .row2{display:flex; justify-content:space-between; gap:8px; margin-top:4px; color:var(--muted)}
-.download-link{margin-left:12px; color:#93c5fd; font-size:12px; text-decoration:none}
 .layout{display:grid; grid-template-columns:1fr 1fr; gap:16px; padding:16px}
 .section-head{display:flex; justify-content:space-between; align-items:center}
-.legend .chip{font-size:11px; padding:2px 6px; border-radius:999px; border:1px solid var(--border); background:var(--chipbg)}
+.legend{display:flex; gap:6px; align-items:center}
+.legend .chip{font-size:11px; padding:2px 10px; border-radius:999px; border:1px solid; background:#0c1018}
+.pos-chip{color:var(--good); border-color:var(--good)}
+.neu-chip{color:var(--neutral); border-color:#475569}
+.neg-chip{color:var(--bad); border-color:var(--bad)}
 .treemap-wrap{background:#0c1018; border:1px solid var(--border); border-radius:12px; padding:8px}
 #upTreemap,#downTreemap{width:100%; height:560px}
 .group-border{fill:none; stroke:#334155; stroke-width:1.2px; rx:10; ry:10}
+.group-bg{rx:10; ry:10}
 .node-rect{stroke:#0b1220; stroke-width:1px; rx:6; ry:6}
 .node-title{font-size:12px; fill:#e5e7eb}
-.node-sub{font-size:11px; fill:#cbd5e1}
+.node-line{font-size:12px; fill:#e5e7eb}
 @media (max-width:1100px){ .layout{grid-template-columns:1fr} #upTreemap,#downTreemap{height:480px} }

@@ -1,5 +1,5 @@
 
-/* app.js — 不快取 + 修正顏色 + 移除藍字狀態列 */
+/* app.js hotfix — legend colors + group heat layer + single-line stock label */
 const URL_VER = new URLSearchParams(location.search).get('v') || Date.now();
 const XLSX_FILE = new URL(`data.xlsx?v=${URL_VER}`, location.href).toString();
 const REVENUE_SHEET='Revenue';
@@ -12,12 +12,10 @@ function toHalfWidth(str){ return z(str).replace(/[０-９Ａ-Ｚａ-ｚ]/g, ch=
 function normText(s){ return z(s).replace(/[​-‍﻿]/g,'').replace(/[　]/g,' ').replace(/\s+/g,' ').trim(); }
 function normCode(s){ return toHalfWidth(z(s)).replace(/[​-‍﻿]/g,'').replace(/\s+/g,'').trim(); }
 function displayPct(v){ if(v==null||!isFinite(v)) return '—'; const s=v.toFixed(1)+'%'; return v>0?('+'+s):s; }
-function colorFor(v, mode){ if(v==null||!isFinite(v)) return '#0f172a'; const t=Math.min(1,Math.abs(v)/80); const alpha=0.18+0.42*t; const good=(mode==='greenPositive'); const pos=good?'16,185,129':'239,68,68'; const neg=good?'239,68,68':'16,185,129'; const rgb=(v>=0)?pos:neg; return `rgba(${rgb},${alpha})`; }
+function colorFor(v, mode){ if(v==null||!isFinite(v)) return '#0f172a'; const t=Math.min(1,Math.abs(v)/80); const alpha=0.25+0.35*t; const good=(mode==='greenPositive'); const pos=good?'16,185,129':'239,68,68'; const neg=good?'239,68,68':'16,185,129'; const rgb=(v>=0)?pos:neg; return `rgba(${rgb},${alpha})`; }
 function safe(s){ return z(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 window.addEventListener('DOMContentLoaded', async()=>{
-  // 設定「下載目前版本 data.xlsx」的連結，點了也不會拿到舊檔
-  const a=document.getElementById('dlData'); if(a){ a.href='data.xlsx?v='+URL_VER; }
   try{ await loadWorkbook(); initControls(); }catch(e){ console.error(e); alert('載入失敗：'+e.message); }
   document.querySelector('#runBtn')?.addEventListener('click', handleRun);
 });
@@ -67,13 +65,31 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
   for(const e of edges){ const rel=normText(e['關係類型']||'未分類'); const key=normCode(e[codeField]); const r=byCode.get(key); if(!r) continue; const v=getMetricValue(r,month,metric); if(v==null) continue; if(!groups.has(rel)) groups.set(rel,[]); groups.get(rel).push({ code:r['個股'], name:r['名稱'], value:v }); }
   const hint=document.getElementById(hintId); if(groups.size===0){ hint.textContent='此區在選定月份沒有可用數據'; return; } else { hint.textContent=''; }
   const children=[]; for(const [rel,list] of groups){ const avg=d3.mean(list,d=>d.value); const kids=list.map(s=>({ name:`${s.code} ${s.name||''}`.trim(), code:s.code, value:Math.max(0.01,Math.abs(s.value)), raw:s.value })); children.push({ name:rel, avg, children:kids }); }
-  const root=d3.hierarchy({ children }).sum(d=>d.value).sort((a,b)=>(b.value||0)-(a.value||0)); d3.treemap().size([W,H]).paddingOuter(8).paddingInner(3)(root);
+  const root=d3.hierarchy({ children }).sum(d=>d.value).sort((a,b)=>(b.value||0)-(a.value||0));
+  d3.treemap().size([W,H]).paddingOuter(8).paddingInner(3).paddingTop(22)(root); // 預留抬頭空間
+
   const g=svg.append('g');
+
+  // 先畫群組底色（依平均值）
   const parents=g.selectAll('g.parent').data(root.children||[]).enter().append('g').attr('class','parent');
-  parents.append('rect').attr('class','group-border').attr('x',d=>d.x0).attr('y',d=>d.y0).attr('width',d=>Math.max(0,d.x1-d.x0)).attr('height',d=>Math.max(0,d.y1-d.y0));
-  parents.append('text').attr('class','node-title').attr('x',d=>d.x0+6).attr('y',d=>d.y0+16).text(d=>`${d.data.name}  平均：${displayPct(d.data.avg)}`);
+  parents.append('rect')
+    .attr('class','group-bg')
+    .attr('x',d=>d.x0).attr('y',d=>d.y0)
+    .attr('width',d=>Math.max(0,d.x1-d.x0)).attr('height',d=>Math.max(0,d.y1-d.y0))
+    .attr('fill', d=> colorFor(d.data.avg, document.querySelector('#colorMode')?.value || 'redPositive'));
+  parents.append('rect')
+    .attr('class','group-border')
+    .attr('x',d=>d.x0).attr('y',d=>d.y0)
+    .attr('width',d=>Math.max(0,d.x1-d.x0)).attr('height',d=>Math.max(0,d.y1-d.y0));
+  parents.append('text')
+    .attr('class','node-title')
+    .attr('x', d=>d.x0+6).attr('y', d=>d.y0+16)
+    .text(d=>`${d.data.name}  平均：${displayPct(d.data.avg)}`);
+
+  // 葉節點（個股）
   const node=g.selectAll('g.node').data(root.leaves()).enter().append('g').attr('class','node').attr('transform',d=>`translate(${d.x0},${d.y0})`);
-  node.append('rect').attr('class','node-rect').attr('width',d=>Math.max(0,d.x1-d.x0)).attr('height',d=>Math.max(0,d.y1-d.y0)).attr('fill', d=>colorFor(d.data.raw, colorMode));
-  node.append('text').attr('class','node-sub').attr('x',6).attr('y',16).text(d=>`${(d.data.code||'').toString().slice(0,6)} ${displayPct(d.data.raw)}`).each(function(d){ const w=d.x1-d.x0; if(this.getBBox().width>w-8){ d3.select(this).attr('opacity',0.85).attr('font-size',10);} });
-  node.append('text').attr('class','node-sub').attr('x',6).attr('y',30).text(d=>`${safe((d.data.name||'').slice(0,8))}`).each(function(d){ const w=d.x1-d.x0; if(this.getBBox().width>w-8){ d3.select(this).attr('opacity',0.8).attr('font-size',10);} });
+  node.append('rect').attr('class','node-rect').attr('width',d=>Math.max(0,d.x1-d.x0)).attr('height',d=>Math.max(0,d.y1-d.y0)).attr('fill', d=> colorFor(d.data.raw, document.querySelector('#colorMode')?.value || 'redPositive'));
+  node.append('text').attr('class','node-line').attr('x',6).attr('y',16)
+    .text(d=>`${(d.data.code||'')} ${safe((d.data.name||''))} ${displayPct(d.data.raw)}`)
+    .each(function(d){ const w=d.x1-d.x0; if(this.getBBox().width>w-8){ d3.select(this).attr('opacity',0.9).attr('font-size',10); }});
 }
