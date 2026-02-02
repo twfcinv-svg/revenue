@@ -6,7 +6,6 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>供應鏈月營收熱力圖｜上游／下游 Treemap</title>
   <link rel="stylesheet" href="styles.css" />
-  <!-- SheetJS / D3 -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
 </head>
@@ -19,7 +18,7 @@
   <section class="controls">
     <div class="field">
       <label for="stockInput">股票代號</label>
-      <input id="stockInput" type="text" placeholder="例如：2330" inputmode="numeric" />
+      <input id="stockInput" type="text" placeholder="例如：2330 或 台積電" />
     </div>
     <div class="field">
       <label for="monthSelect">月份</label>
@@ -40,9 +39,8 @@
       </select>
     </div>
     <button id="runBtn" class="primary">查詢</button>
-
-    <!-- 查詢結果 chip：放在查詢按鈕旁邊 -->
     <div id="resultChip" class="result-chip" aria-live="polite"></div>
+    <span id="status" class="status" style="margin-left:8px"></span>
   </section>
 
   <main class="layout">
@@ -74,7 +72,7 @@
   </main>
 
   <footer class="page-footer">
-    <p>資料來源：<code>data.xlsx</code>；工作表 <strong>Revenue</strong> / <strong>Links</strong>（<em>權重</em>已移除）。部署至 GitHub Pages 即可。</p>
+    <p>請將 <code>data.xlsx</code> 與本檔同層；工作表需為 <strong>Revenue</strong> / <strong>Links</strong>。</p>
   </footer>
 
   <script src="app.js"></script>
