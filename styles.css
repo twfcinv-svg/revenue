@@ -1,0 +1,46 @@
+
+:root{
+  --bg:#0f1115; --panel:#151922; --muted:#9aa4b2;
+  --text:#e6e9ef; --good:#ef4444; --bad:#10b981; /* 預設：紅=好、綠=弱 */
+  --good2:#10b981; --bad2:#ef4444;            /* 切換：綠=好、紅=弱 */
+  --neutral:#94a3b8; --primary:#f97316; --chipbg:#0c1018;
+  --card:#1a2030; --border:#22283a;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Noto Sans CJK TC",sans-serif; background:var(--bg); color:var(--text)}
+.page-header{padding:20px 16px 8px}
+.page-header h1{margin:0;font-size:22px}
+.sub{margin-top:6px;color:var(--muted);font-size:14px}
+
+.controls{display:flex; gap:12px; padding:12px 16px; flex-wrap:wrap; align-items:flex-end; background:var(--panel); border-top:1px solid var(--border); border-bottom:1px solid var(--border)}
+.field{display:flex; flex-direction:column; gap:6px}
+label{font-size:12px; color:var(--muted)}
+input,select,button{height:36px; padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:#0c1018; color:var(--text)}
+button.primary{background:var(--primary); border:none; color:white; font-weight:600; padding:0 14px; cursor:pointer}
+.status{color:var(--muted); font-size:12px}
+
+/* 查詢結果 chip（在查詢按鈕右側） */
+.result-chip{display:flex; align-items:center; gap:12px; margin-left:auto}
+.result-card{background:var(--card); border:1px solid var(--border); border-radius:12px; padding:8px 12px; min-width:240px}
+.result-card .row1{display:flex; justify-content:space-between; gap:8px}
+.result-card .row2{display:flex; justify-content:space-between; gap:8px; margin-top:4px; color:var(--muted)}
+
+/* 兩欄：上游/下游各占一半 */
+.layout{display:grid; grid-template-columns:1fr 1fr; gap:16px; padding:16px}
+.column h2{margin:4px 0 12px; font-size:16px; color:#cbd5e1}
+.section-head{display:flex; justify-content:space-between; align-items:center}
+.legend{display:flex; gap:6px; align-items:center}
+.legend .chip{font-size:11px; padding:2px 6px; border-radius:999px; border:1px solid var(--border); background:var(--chipbg)}
+.pos-chip{color:var(--good)} .neg-chip{color:var(--bad)} .neu-chip{color:var(--neutral)}
+
+/* Treemap 畫布 */
+.treemap-wrap{background:#0c1018; border:1px solid var(--border); border-radius:12px; padding:8px}
+#upTreemap,#downTreemap{width:100%; height:560px}
+.node-rect{stroke:#0b1220; stroke-width:1px; rx:6; ry:6}
+.group-border{fill:none; stroke:#334155; stroke-width:1.2px; rx:10; ry:10}
+.node-title{font-size:12px; fill:#e5e7eb}
+.node-sub{font-size:11px; fill:#cbd5e1}
+
+/* Responsive */
+@media (max-width: 1100px){ .layout{grid-template-columns:1fr} #upTreemap,#downTreemap{height:480px} }

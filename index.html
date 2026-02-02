@@ -1,0 +1,82 @@
+
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>供應鏈月營收熱力圖｜上游／下游 Treemap</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- SheetJS / D3 -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+</head>
+<body>
+  <header class="page-header">
+    <h1>供應鏈月營收熱力圖</h1>
+    <p class="sub">輸入股票代號、選擇月份與指標（MoM/YoY）。下方：左＝上游、右＝下游（皆以關係類型分群的 Treemap）。</p>
+  </header>
+
+  <section class="controls">
+    <div class="field">
+      <label for="stockInput">股票代號</label>
+      <input id="stockInput" type="text" placeholder="例如：2330" inputmode="numeric" />
+    </div>
+    <div class="field">
+      <label for="monthSelect">月份</label>
+      <select id="monthSelect"></select>
+    </div>
+    <div class="field">
+      <label for="metricSelect">指標</label>
+      <select id="metricSelect">
+        <option value="YoY">年成長 (YoY)</option>
+        <option value="MoM">月變動 (MoM)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="colorMode">顏色邏輯</label>
+      <select id="colorMode">
+        <option value="redPositive" selected>紅=好 / 綠=弱</option>
+        <option value="greenPositive">綠=好 / 紅=弱</option>
+      </select>
+    </div>
+    <button id="runBtn" class="primary">查詢</button>
+
+    <!-- 查詢結果 chip：放在查詢按鈕旁邊 -->
+    <div id="resultChip" class="result-chip" aria-live="polite"></div>
+  </section>
+
+  <main class="layout">
+    <section class="column" id="upstreamCol">
+      <div class="section-head">
+        <h2>上游 Treemap（依關係類型）</h2>
+        <div class="legend">
+          <span class="chip pos-chip">表現佳</span>
+          <span class="chip neu-chip">中性</span>
+          <span class="chip neg-chip">表現弱</span>
+        </div>
+      </div>
+      <div class="treemap-wrap"><svg id="upTreemap"></svg></div>
+      <div id="upHint" class="meta" style="margin-top:6px"></div>
+    </section>
+
+    <section class="column" id="downstreamCol">
+      <div class="section-head">
+        <h2>下游 Treemap（依關係類型）</h2>
+        <div class="legend">
+          <span class="chip pos-chip">表現佳</span>
+          <span class="chip neu-chip">中性</span>
+          <span class="chip neg-chip">表現弱</span>
+        </div>
+      </div>
+      <div class="treemap-wrap"><svg id="downTreemap"></svg></div>
+      <div id="downHint" class="meta" style="margin-top:6px"></div>
+    </section>
+  </main>
+
+  <footer class="page-footer">
+    <p>資料來源：<code>data.xlsx</code>；工作表 <strong>Revenue</strong> / <strong>Links</strong>（<em>權重</em>已移除）。部署至 GitHub Pages 即可。</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
