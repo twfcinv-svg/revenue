@@ -4,20 +4,24 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>供應鏈月營收熱力圖｜上游／下游 Treemap</title>
-  <link rel="stylesheet" href="styles.css" />
+  <title>供應鏈月營收熱力圖｜診斷版（強制不快取）</title>
+  <!-- 動態帶版本參數，避免快取 -->
+  <script>
+    const VER = new URLSearchParams(location.search).get('v') || Date.now();
+    document.write('<link rel="stylesheet" href="styles.css?v='+VER+'">');
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
 </head>
 <body>
   <header class="page-header">
-    <h1>供應鏈月營收熱力圖</h1>
-    <p class="sub">輸入股票代號、選擇月份與指標（MoM/YoY）。下方：左＝上游、右＝下游（皆以關係類型分群的 Treemap）。</p>
+    <h1>供應鏈月營收熱力圖（診斷版）</h1>
+    <p class="sub">網址可加 <code>?v=任意字串</code> 來強制讀取新版資料與腳本。</p>
   </header>
 
   <section class="controls">
     <div class="field">
-      <label for="stockInput">股票代號</label>
+      <label for="stockInput">股票代號 / 名稱</label>
       <input id="stockInput" type="text" placeholder="例如：2330 或 台積電" />
     </div>
     <div class="field">
@@ -72,9 +76,12 @@
   </main>
 
   <footer class="page-footer">
-    <p>請將 <code>data.xlsx</code> 與本檔同層；工作表需為 <strong>Revenue</strong> / <strong>Links</strong>。</p>
+    <p>請將 <code>data.xlsx</code> 與本檔同層。網址後加 <code>?v=20260202</code> 可強制取新檔。</p>
   </footer>
 
-  <script src="app.js"></script>
+  <!-- 動態載入 app.js 並帶版本參數 -->
+  <script>
+    document.write('<script src="app.js?v='+VER+'"><\/script>');
+  </script>
 </body>
 </html>
