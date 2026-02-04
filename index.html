@@ -1,441 +1,87 @@
-<!DOCTYPE html>
+
+<!doctype html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8" />
-  <title>營收熱力樹圖（上/下游）</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    :root{ --bg:#0f172a; --panel:#111827; --card:#0b1220; --text:#e5e7eb; --muted:#9ca3af; }
-    body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
-    header{padding:16px 20px;border-bottom:1px solid #1f2937;background:linear-gradient(180deg,#0b1220,transparent);} 
-    h1{font-size:20px;margin:0;}
-    #controls{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-top:12px;}
-    .ctrl{display:flex;flex-direction:column;gap:6px}
-    .ctrl label{font-size:12px;color:var(--muted)}
-    .ctrl input[type="text"], .ctrl select, .ctrl button{
-      background:#0b1220;border:1px solid #1f2937;color:var(--text);border-radius:8px;
-      padding:8px 10px;min-width:140px;outline:none;
-    }
-    .ctrl button{cursor:pointer;background:#1e293b;border-color:#334155}
-    .ctrl button:hover{background:#243042}
-    #boards{display:flex;gap:12px; padding:14px;}
-    .board{flex:1; min-height:74vh; border:1px solid #1f2937;border-radius:12px; background:var(--card); position:relative;}
-    .board h2{position:absolute; left:12px; top:8px; font-size:14px; color:#94a3b8; margin:0; z-index:1}
-    .chart{position:absolute; inset:0; top:28px;}
-    footer{padding:8px 16px;color:#94a3b8;font-size:12px}
-    .legend{display:flex;gap:8px;align-items:center;color:#cbd5e1;font-size:12px;margin-left:auto}
-    .chip{display:inline-block;padding:2px 8px;border-radius:99px;border:1px solid #334155;background:#0b1220}
-  </style>
-
-  <!-- 正確的 CDN Script 標籤 -->
-  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.20.2/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>供應鏈月營收熱力圖｜診斷版（強制不快取）</title>
+  <!-- 動態帶版本參數，避免快取 -->
+  <script>
+    const VER = new URLSearchParams(location.search).get('v') || Date.now();
+    document.write('<link rel="stylesheet" href="styles.css?v='+VER+'">');
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
 </head>
 <body>
-  <header>
-    <h1>營收熱力樹圖（搜尋個股的上/下游）</h1>
-
-    <div id="controls">
-      <div class="ctrl">
-        <label for="code">查詢個股代號</label>
-        <div style="display:flex;gap:8px">
-          <input id="code" type="text" placeholder="例如：2330 / 2454" />
-          <button id="reloadBtn">讀取 / 重新計算</button>
-        </div>
-      </div>
-
-      <div class="ctrl">
-        <label for="month">月份（自動偵測）</label>
-        <select id="month"></select>
-      </div>
-
-      <div class="ctrl">
-        <label for="sizeMetric">面積大小指標</label>
-        <select id="sizeMetric">
-          <option value="YoY" selected>YoY 年成長（強度取絕對值）</option>
-          <option value="MoM">MoM 月變動（強度取絕對值）</option>
-        </select>
-      </div>
-
-      <div class="ctrl">
-        <label for="colorMetric">顏色指標（亦用於類股平均）</label>
-        <select id="colorMetric">
-          <option value="MoM" selected>MoM 月變動（綠正紅負）</option>
-          <option value="YoY">YoY 年成長（綠正紅負）</option>
-        </select>
-      </div>
-
-      <div class="ctrl">
-        <label for="depth">搜尋深度</label>
-        <select id="depth">
-          <option value="1" selected>1 層（直接供應/直接客戶）</option>
-          <option value="2">2 層</option>
-          <option value="3">3 層</option>
-        </select>
-      </div>
-
-      <div class="legend">
-        <span class="chip">父層面積＝以顏色指標的「類股平均」決定（正 > 負）</span>
-        <span class="chip">子層面積＝|面積大小指標|</span>
-      </div>
-    </div>
+  <header class="page-header">
+    <h1>供應鏈月營收熱力圖（診斷版）</h1>
+    <p class="sub">網址可加 <code>?v=任意字串</code> 來強制讀取新版資料與腳本。</p>
   </header>
 
-  <div id="boards">
-    <div class="board">
-      <h2>上游（供應商）</h2>
-      <div id="chartUp" class="chart"></div>
+  <section class="controls">
+    <div class="field">
+      <label for="stockInput">股票代號 / 名稱</label>
+      <input id="stockInput" type="text" placeholder="例如：2330 或 台積電" />
     </div>
-    <div class="board">
-      <h2>下游（客戶）</h2>
-      <div id="chartDown" class="chart"></div>
+    <div class="field">
+      <label for="monthSelect">月份</label>
+      <select id="monthSelect"></select>
     </div>
-  </div>
+    <div class="field">
+      <label for="metricSelect">指標</label>
+      <select id="metricSelect">
+        <option value="YoY">年成長 (YoY)</option>
+        <option value="MoM">月變動 (MoM)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="colorMode">顏色邏輯</label>
+      <select id="colorMode">
+        <option value="redPositive" selected>紅=好 / 綠=弱</option>
+        <option value="greenPositive">綠=好 / 紅=弱</option>
+      </select>
+    </div>
+    <button id="runBtn" class="primary">查詢</button>
+    <div id="resultChip" class="result-chip" aria-live="polite"></div>
+    <span id="status" class="status" style="margin-left:8px"></span>
+  </section>
 
-  <footer>
-    已部署到 GitHub Pages（https://）即可正常讀取 data.xlsx；確保 <code>index.html</code> 與 <code>data.xlsx</code> 同層。
+  <main class="layout">
+    <section class="column" id="upstreamCol">
+      <div class="section-head">
+        <h2>上游 Treemap（依關係類型）</h2>
+        <div class="legend">
+          <span class="chip pos-chip">表現佳</span>
+          <span class="chip neu-chip">中性</span>
+          <span class="chip neg-chip">表現弱</span>
+        </div>
+      </div>
+      <div class="treemap-wrap"><svg id="upTreemap"></svg></div>
+      <div id="upHint" class="meta" style="margin-top:6px"></div>
+    </section>
+
+    <section class="column" id="downstreamCol">
+      <div class="section-head">
+        <h2>下游 Treemap（依關係類型）</h2>
+        <div class="legend">
+          <span class="chip pos-chip">表現佳</span>
+          <span class="chip neu-chip">中性</span>
+          <span class="chip neg-chip">表現弱</span>
+        </div>
+      </div>
+      <div class="treemap-wrap"><svg id="downTreemap"></svg></div>
+      <div id="downHint" class="meta" style="margin-top:6px"></div>
+    </section>
+  </main>
+
+  <footer class="page-footer">
+    <p>請將 <code>data.xlsx</code> 與本檔同層。網址後加 <code>?v=20260202</code> 可強制取新檔。</p>
   </footer>
 
+  <!-- 動態載入 app.js 並帶版本參數 -->
   <script>
-    const DATA_XLSX_PATH = './data.xlsx';
-    const DATA_CSV_PATH  = './data.csv';
-    const REVENUE_SHEET_NAME = 'Revenue';
-    const LINKS_SHEET_NAME   = 'Links';
-
-    let rowsAll = [];
-    let headerAll = [];
-    let monthMap = { YoY: {}, MoM: {} };
-    let monthSortedAsc = [];
-
-    let edges = [];
-    let upMap = {};
-    let downMap = {};
-
-    const monthHeaderRegex = /^(\d{6})單月合併營收(年成長|月變動)\(%\)$/;
-
-    const chartUp   = echarts.init(document.getElementById('chartUp'), null, {renderer:'canvas', useDirtyRect:true});
-    const chartDown = echarts.init(document.getElementById('chartDown'), null, {renderer:'canvas', useDirtyRect:true});
-
-    async function loadDataFixedPath(){
-      try{
-        const wb = await loadExcelFromUrl(DATA_XLSX_PATH);
-        const revName = wb.SheetNames.includes(REVENUE_SHEET_NAME) ? REVENUE_SHEET_NAME : wb.SheetNames[0];
-        const { header, rows } = parseSheetToRows(wb.Sheets[revName]);
-        rowsAll = rows; headerAll = header;
-        buildMonthMap(headerAll);
-        if(wb.SheetNames.includes(LINKS_SHEET_NAME)){
-          edges = parseLinksSheet(wb.Sheets[LINKS_SHEET_NAME]);
-        }else{ edges = []; }
-        buildAdjacency();
-        fillMonthSelect();
-        renderBoth();
-        return;
-      }catch(e){ console.warn('讀 Excel 失敗，改讀 CSV：', e); }
-
-      try{
-        const parsed = await loadCsvFromUrl(DATA_CSV_PATH);
-        rowsAll = parsed.data;
-        headerAll = parsed.meta.fields || Object.keys(rowsAll[0] || {});
-        buildMonthMap(headerAll);
-        edges = []; upMap = {}; downMap = {};
-        fillMonthSelect();
-        renderBoth();
-      }catch(e){
-        showEmpty(chartUp, '找不到資料（需放 data.xlsx 或 data.csv）');
-        showEmpty(chartDown, '找不到資料（需放 data.xlsx 或 data.csv）');
-      }
-    }
-
-    async function loadExcelFromUrl(url){
-      const res = await fetch(url, { cache: 'no-store' });
-      if(!res.ok) throw new Error('讀取 Excel 失敗：' + res.status + ' ' + res.statusText);
-      const ab = await res.arrayBuffer();
-      return XLSX.read(ab, { type:'array' });
-    }
-    function parseSheetToRows(sheet){
-      const aoa = XLSX.utils.sheet_to_json(sheet, { header:1, raw:true, defval:'' });
-      if(!aoa.length) throw new Error('此工作表沒有資料');
-      const headerIdx = aoa.findIndex(r => r.map(c => String(c).trim()).includes('個股') && r.map(c => String(c).trim()).includes('名稱'));
-      if(headerIdx === -1) throw new Error('找不到標題列（需包含「個股」、「名稱」）');
-      const header = aoa[headerIdx].map(s => String(s).trim());
-      const rows = [];
-      for(let i = headerIdx+1; i < aoa.length; i++){
-        const arr = aoa[i];
-        if(!arr || arr.every(c => (c === '' || c === null))) continue;
-        const obj = {};
-        header.forEach((h, idx)=>{ obj[h] = arr[idx] !== undefined ? arr[idx] : ''; });
-        header.forEach(h=>{
-          const m = String(h).match(monthHeaderRegex);
-          if(m){
-            const v = parseFloat(String(obj[h]).replace(/,/g,''));
-            obj[h] = Number.isFinite(v) ? v : null;
-          }
-        });
-        if(Object.prototype.hasOwnProperty.call(obj,'個股')) obj['個股'] = String(obj['個股']).trim();
-        rows.push(obj);
-      }
-      return { header, rows };
-    }
-
-    function parseLinksSheet(sheet){
-      const rows = XLSX.utils.sheet_to_json(sheet, { defval:'' });
-      const out = [];
-      for(const r of rows){
-        const up = String(r['上游代號'] ?? '').trim();
-        const dn = String(r['下游代號'] ?? '').trim();
-        if(!up || !dn) continue;
-        out.push({ s: up, t: dn, type: r['關係類型'] ?? '', w: (Number.isFinite(+r['權重'])) ? +r['權重'] : null, note: r['備註'] ?? '' });
-      }
-      return out;
-    }
-
-    async function loadCsvFromUrl(url){
-      const res = await fetch(url, { cache: 'no-store' });
-      if(!res.ok) throw new Error('讀取 CSV 失敗：' + res.status + ' ' + res.statusText);
-      const text = await res.text();
-      const parsed = Papa.parse(text, { header: true, dynamicTyping: true, skipEmptyLines: 'greedy' });
-      parsed.data.forEach(r=>{
-        Object.keys(r).forEach(k=>{
-          const m = String(k).match(monthHeaderRegex);
-          if(m && typeof r[k] === 'string'){
-            const v = parseFloat(r[k].replace(/,/g,''));
-            r[k] = Number.isFinite(v) ? v : null;
-          }
-        });
-        if(Object.prototype.hasOwnProperty.call(r,'個股')) r['個股'] = String(r['個股']).trim();
-      });
-      return parsed;
-    }
-
-    function buildMonthMap(header){
-      const YoY = {}, MoM = {};
-      header.forEach(h=>{
-        const m = String(h).match(monthHeaderRegex);
-        if(m){
-          const ym = m[1];
-          const kind = m[2] === '年成長' ? 'YoY' : 'MoM';
-          if(kind === 'YoY') YoY[ym] = h; else MoM[ym] = h;
-        }
-      });
-      const monthsBoth = Object.keys(YoY).filter(m => MoM[m]);
-      monthMap = { YoY, MoM };
-      monthSortedAsc = monthsBoth.sort();
-    }
-    function fillMonthSelect(){
-      const sel = document.getElementById('month');
-      sel.innerHTML = '';
-      if(!monthSortedAsc.length){
-        const opt = document.createElement('option');
-        opt.value = ''; opt.textContent = '（未偵測到月份欄位）';
-        sel.appendChild(opt);
-        return;
-      }
-      monthSortedAsc.forEach(m=>{
-        const opt = document.createElement('option');
-        opt.value = m; opt.textContent = formatMonth(m);
-        sel.appendChild(opt);
-      });
-      sel.value = monthSortedAsc[monthSortedAsc.length-1];
-    }
-
-    function buildAdjacency(){
-      upMap = {}; downMap = {};
-      for(const e of edges){
-        if(!downMap[e.s]) downMap[e.s] = new Set();
-        if(!upMap[e.t]) upMap[e.t] = new Set();
-        downMap[e.s].add(e.t);
-        upMap[e.t].add(e.s);
-      }
-    }
-
-    function bfs(start, mode, maxDepth){
-      const adj = (mode === 'up') ? upMap : downMap;
-      const seen = new Set([start]);
-      const out = new Map();
-      let frontier = [start];
-      let d = 0;
-      while(frontier.length && d < maxDepth){
-        const next = [];
-        for(const n of frontier){
-          const neigh = adj[n] ? Array.from(adj[n]) : [];
-          for(const v of neigh){
-            if(seen.has(v)) continue;
-            seen.add(v); out.set(v, d+1); next.push(v);
-          }
-        }
-        frontier = next; d++;
-      }
-      return out;
-    }
-
-    function showEmpty(chart, msg){
-      chart.clear();
-      chart.setOption({ title:{text: msg, left:'center', top:'middle', textStyle:{color:'#94a3b8', fontSize:16}}, backgroundColor:'#0b1220' });
-    }
-    function average(arr){ const v = arr.filter(x => Number.isFinite(x)); return v.length ? v.reduce((a,b)=>a+b,0)/v.length : 0; }
-    function formatMonth(m){ return m.slice(0,4)+'-'+m.slice(4); }
-    function fmt(n){ if(n === null || n === undefined || !Number.isFinite(n)) return '—'; return Math.round(n*100)/100; }
-
-    function buildTreeFromCodes(codeDepthMap, month, sizeMetric, colorMetric){
-      const sizeHeader  = monthMap[sizeMetric][month];
-      const colorHeader = monthMap[colorMetric][month];
-      const nodes = rowsAll
-        .filter(r => codeDepthMap.has(String(r['個股']).trim()))
-        .map(r => {
-          const code = String(r['個股']).trim();
-          const depth = codeDepthMap.get(code) || 1;
-          const sizeValRaw = Number.isFinite(r[sizeHeader]) ? r[sizeHeader] : 0;
-          const colorVal   = Number.isFinite(r[colorHeader]) ? r[colorHeader] : 0;
-          const sizeVal = Math.max(0.001, Math.abs(sizeValRaw));
-          return { name: `${r['名稱']} (${code})`, code, industry: r['產業別'] || '未分類', depth, value: [sizeVal, colorVal], raw: r };
-        });
-
-      const byIndustry = {};
-      for(const n of nodes){ if(!byIndustry[n.industry]) byIndustry[n.industry] = []; byIndustry[n.industry].push(n); }
-
-      const rootChildren = Object.entries(byIndustry).map(([ind, list])=>{
-        const avgYoY = average(list.map(x => { const h = monthMap['YoY'][month]; return Number.isFinite(x.raw[h]) ? x.raw[h] : null; }));
-        const avgMoM = average(list.map(x => { const h = monthMap['MoM'][month]; return Number.isFinite(x.raw[h]) ? x.raw[h] : null; }));
-        return { name: ind, children: list, meta: { avgYoY, avgMoM, count: list.length } };
-      });
-      return rootChildren;
-    }
-
-    function computeColorExtentFromTrees(trees){
-      const vals = [];
-      for(const t of trees){ t.forEach(ind => ind.children.forEach(c => vals.push(c.value[1]))); }
-      if(!vals.length) return {min:-10, max:10};
-      const min = Math.min(...vals), max = Math.max(...vals);
-      if(min >= 0) return {min:0, max};
-      if(max <= 0) return {min, max:0};
-      return {min, max};
-    }
-
-    // 依「顏色指標」之『類股平均』決定父層面積（正 > 負），並把子層等比縮放
-    function applyIndustrySizingByAvg(tree, month, metric){
-      const avgs = tree.map(group => {
-        const h = monthMap[metric][month];
-        const vals = group.children.map(n => { const v = Number.isFinite(n.raw[h]) ? n.raw[h] : null; return v; }).filter(v => v !== null);
-        const avg = vals.length ? vals.reduce((a,b)=>a+b,0) / vals.length : 0;
-        group.meta = group.meta || {}; group.meta.avgForSizing = avg; return avg;
-      });
-      const pos = avgs.filter(v => v > 0);
-      const negAbs = avgs.filter(v => v < 0).map(v => Math.abs(v));
-      const maxPos = pos.length ? Math.max(...pos) : 0;
-      const maxNeg = negAbs.length ? Math.max(...negAbs) : 0;
-      const EPS = 0.001;
-      function parentTargetFromAvg(avg){
-        if(pos.length){
-          if(avg >= 0){ const ratio = maxPos ? (avg / maxPos) : 0; return 1 + ratio; } // [1,2]
-          else { const ratio = maxNeg ? (Math.abs(avg) / maxNeg) : 1; return EPS + (1 - ratio) * 0.9; } // (EPS,0.9]
-        }else{ const ratio = maxNeg ? (Math.abs(avg) / maxNeg) : 1; return EPS + (1 - ratio) * 0.9; } // 全負
-      }
-      tree.forEach(group => {
-        const target = parentTargetFromAvg(group.meta.avgForSizing || 0);
-        const sumChild = group.children.reduce((s,c)=> s + (Number.isFinite(c.value[0]) ? c.value[0] : 0), 0);
-        const factor = sumChild > 0 ? (target / sumChild) : 1;
-        group.children.forEach(c => { c.value[0] = c.value[0] * factor; });
-      });
-    }
-
-    function makeTreemapOption(visualMin, visualMax){
-      return {
-        toolbox: {show:true, feature:{saveAsImage:{title:'下載PNG'}}},
-        tooltip: {
-          backgroundColor:'#0b1220', borderColor:'#334155', textStyle:{color:'#e5e7eb'},
-          formatter: (info)=>{
-            const node = info.data; const m = document.getElementById('month').value;
-            const colorMetricSel = document.getElementById('colorMetric').value;
-            const sizeMetricSel  = document.getElementById('sizeMetric').value;
-            if(node.children){
-              const {avgYoY, avgMoM, count, avgForSizing} = node.meta || {};
-              const shownAvg = Number.isFinite(avgForSizing) ? avgForSizing : (Number.isFinite(avgMoM) ? avgMoM : (Number.isFinite(avgYoY) ? avgYoY : 0));
-              return `
-                <div style="min-width:220px">
-                  <div style="font-weight:bold;margin-bottom:6px">${node.name}</div>
-                  <div>家數：${count} 家</div>
-                  <div>平均（依顏色指標，${formatMonth(m)}）：<b>${fmt(shownAvg)}%</b></div>
-                  <div style="color:#94a3b8;margin-top:6px">點擊可展開 / 收合</div>
-                </div>`;
-            }
-            const r = node.raw; const windowMonths = monthSortedAsc.filter(x => x <= m).slice(-5);
-            const rowsHtml = windowMonths.map(mm=>{
-              const yHead = monthMap['YoY'][mm]; const oHead = monthMap['MoM'][mm];
-              const y = Number.isFinite(r[yHead]) ? r[yHead] : null; const o = Number.isFinite(r[oHead]) ? r[oHead] : null;
-              return `<tr>
-                <td style="padding:2px 6px;color:#94a3b8">${formatMonth(mm)}</td>
-                <td style="padding:2px 6px;text-align:right;color:${(o??0)>=0?'#22c55e':'#ef4444'}">${fmt(o)}%</td>
-                <td style="padding:2px 6px;text-align:right;color:${(y??0)>=0?'#22c55e':'#ef4444'}">${fmt(y)}%</td>
-              </tr>`; }).join('');
-            const colorVal = node.value[1]; const sizeAbs  = node.value[0];
-            return `
-              <div style="min-width:260px">
-                <div style="font-weight:bold;margin-bottom:2px">${node.name}</div>
-                <div style="color:#94a3b8;margin-bottom:6px">${r['產業別'] ?? ''}｜階層深度：${node.depth}</div>
-                <div style="display:flex;gap:10px;margin-bottom:6px">
-                  <div>當月 ${colorMetricSel}：<b style="color:${colorVal>=0?'#22c55e':'#ef4444'}">${fmt(colorVal)}%</b></div>
-                  <div>面積強度（|${sizeMetricSel}|）：<b>${fmt(sizeAbs)}</b></div>
-                </div>
-                <table style="border-collapse:collapse;font-size:12px">
-                  <thead>
-                    <tr>
-                      <th style="text-align:left;padding:2px 6px;color:#94a3b8">月份</th>
-                      <th style="text-align:right;padding:2px 6px;color:#94a3b8">MoM</th>
-                      <th style="text-align:right;padding:2px 6px;color:#94a3b8">YoY</th>
-                    </tr>
-                  </thead>
-                  <tbody>${rowsHtml}</tbody>
-                </table>
-              </div>`;
-          }
-        },
-        visualMap:{ type:'continuous', dimension:1, min:visualMin, max:visualMax, calculable:true, text:['高','低'], inRange:{ color:['#b91c1c','#fca5a5','#f1f5f9','#86efac','#16a34a'] }, textStyle:{color:'#cbd5e1'}, itemHeight:160, orient:'vertical', right:10, top:10 },
-        series:[{ type:'treemap', roam:true, nodeClick:'zoomToNode', breadcrumb:{itemStyle:{color:'#0b1220', borderColor:'#334155', textStyle:{color:'#cbd5e1'}}}, upperLabel:{ show:true, height:24, color:'#e5e7eb', backgroundColor:'rgba(15,23,42,.6)', formatter: function(p){ const d = p.data; if(d && d.children){ const a = (d.meta && Number.isFinite(d.meta.avgForSizing)) ? d.meta.avgForSizing : (d.meta && Number.isFinite(d.meta.avgMoM)) ? d.meta.avgMoM : (d.meta && Number.isFinite(d.meta.avgYoY)) ? d.meta.avgYoY : 0; const sign = (a > 0 ? '+' : (a < 0 ? '' : '')); return `${d.name} 平均： ${sign}${fmt(a)}%`; } return p.name; } }, label:{show:true, formatter:'{b}', color:'#e5e7eb'}, levels:[ { itemStyle:{borderColor:'#1f2937', borderWidth:1, gapWidth:3} }, { itemStyle:{borderColor:'#1f2937', borderWidth:1, gapWidth:2} }, { itemStyle:{borderColor:'#0f172a', borderWidth:1, gapWidth:1, borderRadius:2} } ], visualDimension:1, data:[] }], backgroundColor:'#0b1220' };
-    }
-
-    function renderBoth(){
-      const month = document.getElementById('month').value;
-      const sizeMetric = document.getElementById('sizeMetric').value;
-      const colorMetric = document.getElementById('colorMetric').value;
-      const code = String(document.getElementById('code').value || '').trim();
-      const depth = parseInt(document.getElementById('depth').value, 10);
-
-      if(!monthSortedAsc.length){ showEmpty(chartUp, '未偵測到月份欄位（YYYYMM單月合併營收年成長(%) / 月變動(%)）'); showEmpty(chartDown, '未偵測到月份欄位（YYYYMM單月合併營收年成長(%) / 月變動(%)）'); return; }
-      if(!code){ showEmpty(chartUp, '請輸入個股代號（左：上游供應商）'); showEmpty(chartDown, '請輸入個股代號（右：下游客戶）'); return; }
-      if(edges.length === 0){ showEmpty(chartUp, '尚未提供 Links（供應鏈）工作表'); showEmpty(chartDown, '尚未提供 Links（供應鏈）工作表'); return; }
-      const hasAnyEdge = (upMap[code] && upMap[code].size) || (downMap[code] && downMap[code].size);
-      if(!hasAnyEdge){ showEmpty(chartUp, `Links 中找不到與「${code}」相關的上/下游關係`); showEmpty(chartDown, `Links 中找不到與「${code}」相關的上/下游關係`); return; }
-
-      const upCodes   = bfs(code, 'up', depth);
-      const downCodes = bfs(code, 'down', depth);
-      if(upCodes.size === 0) showEmpty(chartUp, `「${code}」無上游（或 Links 未繪到上游）`);
-      if(downCodes.size === 0) showEmpty(chartDown, `「${code}」無下游（或 Links 未繪到下游）`);
-      if(upCodes.size === 0 && downCodes.size === 0) return;
-
-      const treeUp   = buildTreeFromCodes(upCodes, month, sizeMetric, colorMetric);
-      const treeDown = buildTreeFromCodes(downCodes, month, sizeMetric, colorMetric);
-
-      applyIndustrySizingByAvg(treeUp, month, colorMetric);
-      applyIndustrySizingByAvg(treeDown, month, colorMetric);
-
-      const {min: visualMin, max: visualMax} = computeColorExtentFromTrees([treeUp, treeDown]);
-      const optUp = makeTreemapOption(visualMin, visualMax);
-      const optDn = makeTreemapOption(visualMin, visualMax);
-      chartUp.setOption(optUp, true); chartDown.setOption(optDn, true);
-      const finalUp = chartUp.getOption(); finalUp.series[0].data = treeUp; chartUp.setOption(finalUp);
-      const finalDn = chartDown.getOption(); finalDn.series[0].data = treeDown; chartDown.setOption(finalDn);
-      window.addEventListener('resize', ()=>{ chartUp.resize(); chartDown.resize(); });
-    }
-
-    document.getElementById('reloadBtn').addEventListener('click', loadDataFixedPath);
-    document.getElementById('month').addEventListener('change', renderBoth);
-    document.getElementById('sizeMetric').addEventListener('change', renderBoth);
-    document.getElementById('colorMetric').addEventListener('change', renderBoth);
-    document.getElementById('depth').addEventListener('change', renderBoth);
-    document.getElementById('code').addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ loadDataFixedPath(); } });
-
-    loadDataFixedPath();
+    document.write('<script src="app.js?v='+VER+'"><\/script>');
   </script>
 </body>
 </html>
