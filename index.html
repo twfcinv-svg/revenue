@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>供應鏈月營收熱力圖｜診斷版（可點個股開 FBS）</title>
+  <title>供應鏈月營收熱力圖｜診斷版（B法：查詢 → 開 FBS）</title>
   <!-- 動態帶版本參數，避免快取 -->
   <script>
     const VER = new URLSearchParams(location.search).get('v') || Date.now();
@@ -16,7 +16,7 @@
 <body>
   <header class="page-header">
     <h1>供應鏈月營收熱力圖（診斷版）</h1>
-    <p class="sub">網址可加 <code>?v=任意字串</code> 來強制讀取新版資料與腳本。點擊個股方塊將於新分頁開啟 FBS 個股頁。</p>
+    <p class="sub">網址可加 <code>?v=任意字串</code> 來強制讀取新版資料與腳本。右上角查詢與 Treemap 個股皆可點擊開啟 FBS。</p>
   </header>
 
   <section class="controls">
@@ -79,10 +79,11 @@
     <p>請將 <code>data.xlsx</code> 與本檔同層。網址後加 <code>?v=20260204</code> 可強制取新檔。</p>
   </footer>
 
-  <!-- 動態載入 app.js 與外掛，皆帶版本參數以避免快取 -->
+  <!-- 依序載入：app.js → 外掛（Treemap 點擊） → B法查詢開連結補強 -->
   <script>
     document.write('<script src="app.js?v='+VER+'"><\/script>');
     document.write('<script src="stock-link-plugin.js?v='+VER+'"><\/script>');
+    document.write('<script src="app_query_link_B.js?v='+VER+'"><\/script>');
   </script>
 </body>
 </html>
