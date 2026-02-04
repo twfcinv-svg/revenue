@@ -1,22 +1,22 @@
-
 <!doctype html>
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>供應鏈月營收熱力圖｜診斷版（強制不快取）</title>
+  <title>供應鏈月營收熱力圖｜診斷版（可點個股開 FBS）</title>
   <!-- 動態帶版本參數，避免快取 -->
   <script>
     const VER = new URLSearchParams(location.search).get('v') || Date.now();
     document.write('<link rel="stylesheet" href="styles.css?v='+VER+'">');
   </script>
+  <!-- 套件 -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
 </head>
 <body>
   <header class="page-header">
     <h1>供應鏈月營收熱力圖（診斷版）</h1>
-    <p class="sub">網址可加 <code>?v=任意字串</code> 來強制讀取新版資料與腳本。</p>
+    <p class="sub">網址可加 <code>?v=任意字串</code> 來強制讀取新版資料與腳本。點擊個股方塊將於新分頁開啟 FBS 個股頁。</p>
   </header>
 
   <section class="controls">
@@ -76,12 +76,13 @@
   </main>
 
   <footer class="page-footer">
-    <p>請將 <code>data.xlsx</code> 與本檔同層。網址後加 <code>?v=20260202</code> 可強制取新檔。</p>
+    <p>請將 <code>data.xlsx</code> 與本檔同層。網址後加 <code>?v=20260204</code> 可強制取新檔。</p>
   </footer>
 
-  <!-- 動態載入 app.js 並帶版本參數 -->
+  <!-- 動態載入 app.js 與外掛，皆帶版本參數以避免快取 -->
   <script>
     document.write('<script src="app.js?v='+VER+'"><\/script>');
+    document.write('<script src="stock-link-plugin.js?v='+VER+'"><\/script>');
   </script>
 </body>
 </html>
