@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Treemap：類股面積 = 類股平均成長幅度（可點個股開連結）</title>
+  <style>
+    :root { --bg:#0f172a; --panel:#111827; --text:#e5e7eb; --muted:#94a3b8; --accent:#22d3ee; --border:#334155; }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans TC','Helvetica Neue',Arial}
+    header{display:flex;gap:12px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(17,24,39,.7);backdrop-filter:blur(6px);z-index:5}
+    h1{font-size:16px;margin:0}
+    .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    select,button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px}
+    button:hover,select:hover{border-color:#475569}
+    .note{margin-left:auto;color:var(--muted);font-size:12px}
+    #chart{height:calc(100vh - 64px);width:100%;padding:12px}
+    .error{margin:12px 16px;border:1px solid #ef4444;background:#7f1d1d;color:#fecaca;padding:12px;border-radius:8px}
+    .hint{position:fixed;left:16px;bottom:16px;color:#cbd5e1;font-size:12px;opacity:.85}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Treemap：類股面積 = 類股平均成長幅度</h1>
+    <div class="toolbar">
+      <label>月份</label>
+      <select id="monthSelect"></select>
+      <label>面積依據</label>
+      <select id="metricSelect">
+        <option value="mom">平均 MoM（%）</option>
+        <option value="yoy" selected>平均 YoY（%）</option>
+      </select>
+      <button id="reloadBtn">重新載入 Excel</button>
+    </div>
+    <div class="note">讀取：<code>data.xlsx</code>（同層）｜提示：點擊個股小方塊會開啟 FBS 個股頁</div>
+  </header>
+
+  <div id="msg"></div>
+  <div id="chart"></div>
+  <div class="hint">💡 點擊個股小方塊 → 開啟 <code>https://www.fbs.com.tw/MKT/Index?name=Ｊ線圖&stock=代號</code></div>
+
+  <script>
+  // ====== 工具 ======
+  function toNumber(v){ if(v==null) return NaN; if(typeof v==='number') return v; const s=String(v).trim(); if(!s||s==='-'||s.toLowerCase()==='nan') return NaN; const n=Number(s.replace(/,/g,'').replace(/%/g,'')); return Number.isFinite(n)?n:NaN; }
+  function showError(msg){ document.getElementById('msg').innerHTML = `<div class="error">${msg}</div>`; }
+  function clearError(){ document.getElementById('msg').innerHTML=''; }
+  function yyyymmToLabel(yyyymm){ const y=yyyymm.slice(0,4), m=yyyymm.slice(4); return `${y}年${m}月`; }
+
+  // 固定欄位：代號 / 名稱 / 產業別
+  const COL_CODE = '代號';
+  const COL_NAME = '名稱';
+  const COL_CAT  = '產業別';
+
+  // 月份欄位 regex
+  const RE_YOY = /(\d{6})\s*單月合併營收\s*年成長/;
+  const RE_MOM = /(\d{6})\s*單月合併營收\s*月變動/;
+
+  const FBS_BASE = 'https://www.fbs.com.tw/MKT/Index?name=%EF%BC%AB%E7%B7%9A%E5%9C%96&stock='; // Ｊ線圖 + 代號
+
+  async function loadRows(){
+    const res = await fetch('data.xlsx');
+    if(!res.ok) throw new Error('無法讀取 data.xlsx ('+res.status+')');
+    const buf = await res.arrayBuffer();
+    const wb = XLSX.read(buf,{type:'array'});
+    const sheetName = wb.SheetNames.find(n=>n==='Revenue') || wb.SheetNames[0];
+    const ws = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws,{defval:null,raw:true});
+    if(!rows.length) throw new Error('Excel 無資料列');
+    const headers = Object.keys(rows[0]);
+
+    const months = new Set();
+    const yoyCols = {}; const momCols = {};
+    for(const h of headers){
+      const hs = String(h).replace(/[()（）]/g,'');
+      let m = hs.match(RE_YOY); if(m){ months.add(m[1]); yoyCols[m[1]] = h; continue; }
+      m = hs.match(RE_MOM); if(m){ months.add(m[1]); momCols[m[1]] = h; continue; }
+    }
+    if(months.size===0) throw new Error('找不到「YYYYMM單月合併營收年成長/月變動(%)」欄位');
+
+    const monthList = Array.from(months).sort();
+    return { rows, monthList, yoyCols, momCols };
+  }
+
+  function buildTreemapFor({rows, month, metric, yoyCols, momCols}){
+    const valueHeader = metric==='yoy' ? yoyCols[month] : momCols[month];
+    if(!valueHeader){ throw new Error(`所選月份 ${month} 找不到 ${metric==='yoy'?'年成長':'月變動'} 欄位`); }
+
+    const map = new Map();
+    for(const r of rows){
+      const cat = r[COL_CAT]; const code = r[COL_CODE]; const name = r[COL_NAME]; const v = toNumber(r[valueHeader]);
+      if(cat==null || code==null || name==null) continue;
+      if(!map.has(cat)) map.set(cat, []);
+      map.get(cat).push({code,name,growth:v});
+    }
+
+    const cats=[];
+    for(const [cat, arr] of map.entries()){
+      const vals = arr.map(d=>d.growth).filter(Number.isFinite);
+      const avg = vals.length? vals.reduce((a,b)=>a+b,0)/vals.length : NaN;
+      const children = arr.map(s=>({
+        name:`${s.code} ${s.name} ${Number.isFinite(s.growth)? (s.growth>=0?'+':'')+s.growth.toFixed(1)+'%':''}`,
+        value:[(Number.isFinite(s.growth)?Math.abs(s.growth):0)+1e-6, Number.isFinite(s.growth)?s.growth:0],
+        code:s.code,
+        link: FBS_BASE + encodeURIComponent(String(s.code))
+      }));
+      cats.push({ name:cat, avg, children });
+    }
+
+    const avgs = cats.map(d=>d.avg).filter(Number.isFinite);
+    const minAvg = avgs.length? Math.min(...avgs):0; const maxAvg = avgs.length? Math.max(...avgs):0; const eps=1e-6;
+
+    const data = cats.map(d=>({
+      name:`${d.name} 平均：${Number.isFinite(d.avg)?(d.avg>=0?'+':'')+d.avg.toFixed(1)+'%':'N/A'}`,
+      value:[(Number.isFinite(d.avg)?(d.avg-minAvg):0)+eps, Number.isFinite(d.avg)?d.avg:0],
+      children:d.children, upperLabel:{show:true}
+    })).sort((a,b)=>b.value[1]-a.value[1]);
+
+    return { data, colorMin: Math.min(minAvg, -Math.abs(maxAvg)), colorMax: Math.max(maxAvg, Math.abs(minAvg)) };
+  }
+
+  function renderTreemap(packed, title){
+    const dom = document.getElementById('chart');
+    const chart = echarts.init(dom,null,{renderer:'canvas'});
+    const option = {
+      backgroundColor:'transparent',
+      title: { text: title, left: 16, top: 12, textStyle:{ color:'#e5e7eb', fontSize:14 } },
+      tooltip:{ formatter:info=>{ const p=info.treePathInfo.slice(1).map(x=>x.name).join(' / '); const g=Array.isArray(info.value)?info.value[1]:info.value; return `<div style='font-size:12px'><div style='color:#94a3b8'>${echarts.format.encodeHTML(p)}</div><div>成長：<b>${(g>=0?'+':'')+g.toFixed(1)}%</b></div><div style='color:#94a3b8'>面積：類股平均（已平移，保序）</div><div style='color:#60a5fa'>點擊個股可開啟 FBS</div></div>`; } },
+      visualMap:[{ type:'continuous', dimension:1, min:packed.colorMin, max:packed.colorMax,
+        inRange:{ color:['#16a34a','#f59e0b','#b91c1c'] }, text:['高成長','低/負成長'], textStyle:{color:'#d1d5db'}, right:10, top:20, itemHeight:160, calculable:true }],
+      series:[{ type:'treemap', roam:false, nodeClick:false, width:'100%', height:'90%', top:48,
+        label:{show:true,color:'#e5e7eb',fontSize:12}, upperLabel:{show:true,height:26},
+        itemStyle:{borderColor:'#0b1220',borderWidth:2,gapWidth:6,borderRadius:10},
+        levels:[{itemStyle:{borderWidth:2,gapWidth:6,borderRadius:10}},{itemStyle:{borderWidth:1,gapWidth:4,borderRadius:8}}],
+        data: packed.data }]
+    };
+    chart.setOption(option);
+
+    // 監聽點擊：只有「個股（葉節點）」才開連結
+    chart.getZr().on('click', function (e) {
+      const pointInPixel = [e.offsetX, e.offsetY];
+      if (chart.containPixel('series', pointInPixel)) {
+        const info = chart.convertFromPixel({ seriesIndex: 0 }, pointInPixel);
+        // 用 dispatchAction 反查當前點位的 node 資訊
+        const params = chart.convertToPixel({seriesIndex:0}, info);
+      }
+    });
+
+    chart.on('click', function (params) {
+      // Treemap 的葉節點會有 data.code 與 data.link（我們在 children 設定）
+      const d = params.data || {};
+      if (d && d.code && d.link) {
+        window.open(d.link, '_blank');
+      }
+    });
+
+    window.addEventListener('resize',()=>chart.resize());
+  }
+
+  let GLOBAL = { rows:[], monthList:[], yoyCols:{}, momCols:{} };
+
+  async function boot(){
+    clearError();
+    try{
+      GLOBAL = await loadRows();
+      const monthSel = document.getElementById('monthSelect');
+      monthSel.innerHTML = GLOBAL.monthList.map(m=>`<option value="${m}">${yyyymmToLabel(m)}</option>`).join('');
+      monthSel.value = GLOBAL.monthList[GLOBAL.monthList.length-1];
+
+      const metric = document.getElementById('metricSelect').value;
+      const m = monthSel.value;
+      const packed = buildTreemapFor({ rows: GLOBAL.rows, month: m, metric, yoyCols: GLOBAL.yoyCols, momCols: GLOBAL.momCols });
+      renderTreemap(packed, `${yyyymmToLabel(m)} ｜平均${metric==='yoy'?'YoY':'MoM'}（點個股開連結）`);
+    }catch(err){ showError('讀檔或欄位解析失敗：'+err.message); }
+  }
+
+  document.getElementById('reloadBtn').addEventListener('click', boot);
+  document.getElementById('metricSelect').addEventListener('change', ()=>{
+    if(!GLOBAL.rows.length) return; const m=document.getElementById('monthSelect').value; const metric=document.getElementById('metricSelect').value; try{ const packed=buildTreemapFor({rows:GLOBAL.rows,month:m,metric,yoyCols:GLOBAL.yoyCols,momCols:GLOBAL.momCols}); renderTreemap(packed, `${yyyymmToLabel(m)} ｜平均${metric==='yoy'?'YoY':'MoM'}（點個股開連結）`);}catch(err){ showError(err.message); }
+  });
+  document.getElementById('monthSelect').addEventListener('change', ()=>{
+    if(!GLOBAL.rows.length) return; const m=document.getElementById('monthSelect').value; const metric=document.getElementById('metricSelect').value; try{ const packed=buildTreemapFor({rows:GLOBAL.rows,month:m,metric,yoyCols:GLOBAL.yoyCols,momCols:GLOBAL.momCols}); renderTreemap(packed, `${yyyymmToLabel(m)} ｜平均${metric==='yoy'?'YoY':'MoM'}（點個股開連結）`);}catch(err){ showError(err.message); }
+  });
+
+  boot();
+  </script>
+</body>
+</html>
