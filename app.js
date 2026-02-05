@@ -1,11 +1,8 @@
-/* app.js — v3.4
- * 變更：
- *  1) 類股（群組）標題「靠左置中」：固定使用 treemap 的 paddingTop 區塊垂直置中，避免因字級不同而上下飄。
- *  2) 葉節點（個股）文字溢出改良：
- *     - 面積驅動字級 + 嚴格 fit 後，若仍寬度不足，逐步簡化內容：
- *       (a) 僅顯示「代號」+ 百分比；(b) 只顯示百分比；仍不行則隱藏。
- *     - clipPath 內縮 1px，確保不會視覺溢出。
- *  3) 類股數量上限：僅保留個股數量最多的前 8 組（上游/下游皆適用）。
+/* app.js — v3.5
+ * 這版回應：
+ *  1) 有空間卻不顯示中文＋代號：先嘗試完整(代號+名稱 / 百分比)；若太長，會「逐字省略」名稱(…)，盡量保留代號與名稱。
+ *  2) 數值或資訊被切到：字級允許持續縮小到硬下限(5px)；同時反覆量測直到完全塞入，不再裁切。
+ *  3) 維持 v3.4：群組標題靠左垂直中線、clipPath 內縮 1px、防溢出；上/下游僅保留前 8 類(依個股數量)。
  */
 
 const URL_VER = new URLSearchParams(location.search).get('v') || Date.now();
@@ -141,16 +138,23 @@ function renderResultChip(selfRow, month, metric, colorMode){
 
 // ========= 字級與裁切工具 =========
 const LabelFit = {
-  padding: 8,
+  paddingBase: 8,
   maxFont: 36,      // 全域上限（保護特大格）
-  minFont: 9,
+  minFontSoft: 9,   // 盡量維持的可讀下限
+  minFontHard: 5,   // 真的塞不下時的硬下限（允許更小字以避免裁切）
   lineHeight: 1.15,
 
-  centerText(el, w, h) {
+  dynPadding(w,h){
+    // 小格子自動縮小 padding，釋出更多空間
+    const m = Math.min(w,h);
+    return Math.max(2, Math.min(this.paddingBase, Math.floor(m * 0.12)));
+  },
+
+  centerText(el, w, h, pad) {
     el.setAttribute('text-anchor', 'middle');
     el.setAttribute('dominant-baseline', 'middle');
-    el.setAttribute('x', this.padding + Math.max(0, (w - this.padding*2) / 2));
-    el.setAttribute('y', this.padding + Math.max(0, (h - this.padding*2) / 2));
+    el.setAttribute('x', pad + Math.max(0, (w - pad*2) / 2));
+    el.setAttribute('y', pad + Math.max(0, (h - pad*2) / 2));
   },
 
   ensureClip(gEl, w, h){
@@ -166,71 +170,106 @@ const LabelFit = {
     gEl.querySelectorAll('text').forEach(t => t.setAttribute('clip-path', `url(#${id})`));
   },
 
-  fitBlock(textEl, w, h){
-    const targetW = Math.max(1, w - this.padding*2);
-    const targetH = Math.max(1, h - this.padding*2);
-
-    // 面積驅動字級（與邊長成正比），兩行建議 0.11~0.14
-    const k = 0.12;
-    const areaFont = Math.sqrt(targetW * targetH) * k;
-    const logicalMax = Math.min(this.maxFont, Math.floor(targetH * 0.45));
-    const logicalMin = this.minFont;
-    const baseFont   = Math.max(logicalMin, Math.min(logicalMax, Math.floor(areaFont)));
-
-    textEl.setAttribute('font-size', baseFont);
-    this.centerText(textEl, w, h);
-
-    // 嚴格 fit：避免很長的名稱超寬/超高
-    let bbox = textEl.getBBox();
-    let scale = Math.min(targetW / Math.max(1,bbox.width), targetH / Math.max(1,bbox.height));
-    let finalSize = Math.max(logicalMin, Math.min(logicalMax, Math.floor(baseFont * Math.min(1, scale))));
-
-    // 若仍塞不下，逐步簡化：
-    if (finalSize <= this.minFont) {
-      // a) 只保留代號 + 百分比
-      const tsp = Array.from(textEl.querySelectorAll('tspan'));
-      const fullName = tsp[0]?.textContent || '';
-      const pct      = tsp[1]?.textContent || '';
-      const codeOnly = (fullName.match(/\b\d{4}\b/)||[])[0] || fullName.split(' ')[0] || '';
-      tsp.forEach(t => t.remove());
-      const t1 = document.createElementNS('http://www.w3.org/2000/svg','tspan'); t1.textContent = codeOnly; textEl.appendChild(t1);
-      const t2 = document.createElementNS('http://www.w3.org/2000/svg','tspan'); t2.textContent = pct;      textEl.appendChild(t2);
-      textEl.setAttribute('font-size', this.minFont);
-      this.centerText(textEl, w, h);
-      bbox = textEl.getBBox(); scale = Math.min(targetW / Math.max(1,bbox.width), targetH / Math.max(1,bbox.height));
-      finalSize = Math.max(this.minFont, Math.min(logicalMax, Math.floor(this.minFont * Math.min(1, scale))));
-    }
-
-    if (finalSize <= this.minFont) {
-      // b) 再不行 → 只顯示百分比
-      const tsp = Array.from(textEl.querySelectorAll('tspan'));
-      const pct = tsp[1]?.textContent || tsp[0]?.textContent || '';
-      tsp.forEach(t => t.remove());
-      const t = document.createElementNS('http://www.w3.org/2000/svg','tspan'); t.textContent = pct; textEl.appendChild(t);
-      textEl.setAttribute('font-size', this.minFont);
-      this.centerText(textEl, w, h);
-      bbox = textEl.getBBox(); scale = Math.min(targetW / Math.max(1,bbox.width), targetH / Math.max(1,bbox.height));
-      finalSize = Math.max(this.minFont, Math.min(logicalMax, Math.floor(this.minFont * Math.min(1, scale))));
-    }
-
-    if (finalSize < this.minFont * 0.95) {
-      // c) 仍然不行 → 隱藏
-      textEl.setAttribute('display','none');
-      return;
-    }
-
-    textEl.removeAttribute('display');
-    textEl.setAttribute('font-size', finalSize);
-    this.centerText(textEl, w, h);
-
-    // —— 多行垂直置中：把第一行往上提 (n-1)/2 行距 ——
+  // 將 tspan[0] 的名稱做「逐字省略」，直到寬度塞入
+  ellipsizeNameToWidth(textEl, maxWidth){
     const tspans = Array.from(textEl.querySelectorAll('tspan'));
-    const n = Math.max(1, tspans.length);
-    const offsetEm = -( (n - 1) * this.lineHeight / 2 );
-    tspans.forEach((tsp, i) => {
-      tsp.setAttribute('x', textEl.getAttribute('x'));
-      tsp.setAttribute('dy', i===0 ? `${offsetEm}em` : `${this.lineHeight}em`);
-    });
+    if (!tspans.length) return;
+    const t1 = tspans[0];
+    const full = t1.textContent;
+    let s = full;
+    if (!s) return;
+    // 只省略「中文名稱」部分；盡量保留代號
+    const m = s.match(/^(\d{4})\s*(.*)$/);
+    let code = '', name = s;
+    if (m){ code = m[1]; name = m[2] || ''; }
+    // 先把 t1 設成原樣（每次試一個字）
+    t1.textContent = code + (name ? (' ' + name) : '');
+    while (t1.getComputedTextLength() > maxWidth && name.length > 0){
+      name = name.slice(0, -1);
+      t1.textContent = code + (name ? (' ' + name + '…') : '');
+    }
+  },
+
+  fitBlock(textEl, w, h){
+    const pad = this.dynPadding(w,h);
+    const targetW = Math.max(1, w - pad*2);
+    const targetH = Math.max(1, h - pad*2);
+
+    // 取原始資訊（在建立 text 時已寫入 dataset）
+    const code = textEl.dataset.code || '';
+    const name = textEl.dataset.name || '';
+    const pct  = textEl.dataset.pct  || '';
+
+    // 嘗試不同版型：full -> code+pct -> pct-only
+    const tryLayouts = [
+      () => [ `${code}${name?(' '+name):''}`, pct ],
+      () => [ code, pct ],
+      () => [ pct ]
+    ];
+
+    const k = 0.12; // 面積驅動係數
+    const areaFont = Math.sqrt(targetW * targetH) * k;
+    const logicalMax = Math.min(this.maxFont, Math.floor(targetH * 0.5));
+
+    // 嘗試三種版型；每種版型內部採「先大後小、反覆量測直到塞入」
+    for (let layout of tryLayouts){
+      // 填入候選版型
+      while (textEl.firstChild) textEl.removeChild(textEl.firstChild);
+      const lines = layout();
+      lines.forEach((s,i)=>{
+        const t = document.createElementNS('http://www.w3.org/2000/svg','tspan');
+        t.textContent = s; textEl.appendChild(t);
+      });
+
+      // 初始字級：取 areaFont，夾在 [minHard, logicalMax]
+      let font = Math.max(this.minFontHard, Math.min(logicalMax, Math.floor(areaFont)));
+      textEl.setAttribute('font-size', font);
+      this.centerText(textEl, w, h, pad);
+
+      // 先對第一行做逐字省略（避免長公司名撐寬）
+      this.ellipsizeNameToWidth(textEl, targetW);
+
+      // 量測 → 迭代縮小直到完全塞入（或到 minFontHard 為止）
+      let safety = 0;
+      while (safety++ < 50){
+        const bbox = textEl.getBBox();
+        const scaleW = targetW / Math.max(1,bbox.width);
+        const scaleH = targetH / Math.max(1,bbox.height);
+        const scale = Math.min(scaleW, scaleH, 1);
+        const next = Math.floor(font * scale);
+        if (next >= this.minFontHard && next < font){
+          font = next; textEl.setAttribute('font-size', font); this.centerText(textEl, w, h, pad); continue;
+        }
+        // 若還是超寬（scaleW<1）而字已到硬下限，再次針對第一行做省略
+        if (scaleW < 1 && font <= this.minFontHard){
+          this.ellipsizeNameToWidth(textEl, targetW);
+        }
+        break;
+      }
+
+      // 調整多行垂直置中
+      const tspans = Array.from(textEl.querySelectorAll('tspan'));
+      const n = Math.max(1, tspans.length);
+      const offsetEm = -((n - 1) * this.lineHeight / 2);
+      tspans.forEach((tsp,i)=>{
+        tsp.setAttribute('x', textEl.getAttribute('x'));
+        tsp.setAttribute('dy', i===0 ? `${offsetEm}em` : `${this.lineHeight}em`);
+      });
+
+      // 再次檢查：若現在 bbox 完全落在 target 內，就採用此版型
+      const box = textEl.getBBox();
+      if (box.width <= targetW + 0.1 && box.height <= targetH + 0.1){
+        // 若字級 >= minFontSoft，或這是最後一個版型，就用它
+        if (font >= this.minFontSoft || layout === tryLayouts[tryLayouts.length-1]){
+          textEl.removeAttribute('display');
+          return;
+        }
+        // 否則嘗試更緊湊的下一種版型
+      }
+    }
+
+    // 三種版型都無法塞入 → 隱藏
+    textEl.setAttribute('display','none');
   }
 };
 
@@ -278,7 +317,7 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
     .attr('x',d=>d.x0).attr('y',d=>d.y0)
     .attr('width',d=>Math.max(0,d.x1-d.x0)).attr('height',d=>Math.max(0,d.y1-d.y0));
 
-  // 類股標題：靠左 + 在 HEADER_H 區塊的「垂直置中」；字級仍依群組面積而變
+  // 類股標題：靠左 + 在 HEADER_H 區塊的「垂直置中」；字級依群組面積而變
   const titles = parents.append('text')
     .attr('class','node-title')
     .attr('text-anchor','start')
@@ -294,13 +333,12 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
     const fs = Math.max(11, Math.min(22, Math.floor(Math.sqrt(area) * kGroup)));
     const el = d3.select(this)
       .attr('x', d.x0 + 6)
-      .attr('y', d.y0 + HEADER_H/2)   // 垂直固定在 header 之中，不會上下飄
+      .attr('y', d.y0 + HEADER_H/2)
       .attr('font-size', fs);
 
-    // 清空並重建（用 tspan 是為了之後可加更多欄位）
     this.textContent = '';
     const t1 = document.createElementNS('http://www.w3.org/2000/svg','tspan'); t1.textContent = d.data.name; this.appendChild(t1);
-    if (fs >= 13) { // 小群組只顯示名稱
+    if (fs >= 13) {
       const t2 = document.createElementNS('http://www.w3.org/2000/svg','tspan'); t2.textContent = `  平均：${displayPct(d.data.avg)}`; t2.setAttribute('dx','6'); this.appendChild(t2);
     }
   });
@@ -316,15 +354,18 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
     .attr('fill','#fff')
     .style('paint-order','stroke')
     .style('stroke','rgba(0,0,0,0.35)')
-    .style('stroke-width','2px');
+    .style('stroke-width','2px')
+    .style('text-rendering','geometricPrecision');
 
   labels.each(function(d){
-    const name = `${d.data.code||''} ${d.data.name||''}`.trim();
-    const vstr = displayPct(d.data.raw);
-    const t1 = document.createElementNS('http://www.w3.org/2000/svg','tspan'); t1.textContent = name;
-    const t2 = document.createElementNS('http://www.w3.org/2000/svg','tspan'); t2.textContent = vstr;
+    const code = `${d.data.code||''}`.trim();
+    const name = `${d.data.name||''}`.trim();
+    const pct  = displayPct(d.data.raw);
+    this.dataset.code = code; this.dataset.name = name; this.dataset.pct = pct;
+    const t1 = document.createElementNS('http://www.w3.org/2000/svg','tspan'); t1.textContent = `${code}${name?(' '+name):''}`;
+    const t2 = document.createElementNS('http://www.w3.org/2000/svg','tspan'); t2.textContent = pct;
     this.appendChild(t1); this.appendChild(t2);
-    const title = document.createElementNS('http://www.w3.org/2000/svg','title'); title.textContent = `${name} ${vstr}`; this.appendChild(title);
+    const title = document.createElementNS('http://www.w3.org/2000/svg','title'); title.textContent = `${code} ${name} ${pct}`; this.appendChild(title);
   });
 
   // 批次縮放與裁切
