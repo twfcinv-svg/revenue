@@ -1,8 +1,11 @@
-/* app.js — v3.3
- * 修正：
- *  - 左側個股標籤被裁切：clipPath 內縮 1px 並正確垂直置中（多行 tspan dy 校正）。
- *  - 類股標題字級改為「面積驅動」；越小的群組字越小，視覺接近附圖效果。
- *  - 葉節點仍為「面積驅動 + 嚴格 fit + clip」，字級更平滑。
+/* app.js — v3.4
+ * 變更：
+ *  1) 類股（群組）標題「靠左置中」：固定使用 treemap 的 paddingTop 區塊垂直置中，避免因字級不同而上下飄。
+ *  2) 葉節點（個股）文字溢出改良：
+ *     - 面積驅動字級 + 嚴格 fit 後，若仍寬度不足，逐步簡化內容：
+ *       (a) 僅顯示「代號」+ 百分比；(b) 只顯示百分比；仍不行則隱藏。
+ *     - clipPath 內縮 1px，確保不會視覺溢出。
+ *  3) 類股數量上限：僅保留個股數量最多的前 8 組（上游/下游皆適用）。
  */
 
 const URL_VER = new URLSearchParams(location.search).get('v') || Date.now();
@@ -151,8 +154,7 @@ const LabelFit = {
   },
 
   ensureClip(gEl, w, h){
-    // 內縮 1px，避免邊緣抗鋸齒造成「似乎被吃掉」的錯覺
-    const inset = 1;
+    const inset = 1; // 內縮 1px，避免邊緣吃字
     const svg = gEl.ownerSVGElement; let defs = svg.querySelector('defs');
     if (!defs) defs = svg.insertBefore(document.createElementNS('http://www.w3.org/2000/svg','defs'), svg.firstChild);
     const id = gEl.dataset.clipId || ('clip-' + Math.random().toString(36).slice(2)); gEl.dataset.clipId = id;
@@ -179,11 +181,40 @@ const LabelFit = {
     this.centerText(textEl, w, h);
 
     // 嚴格 fit：避免很長的名稱超寬/超高
-    const bbox = textEl.getBBox();
-    const scale = Math.min(targetW / Math.max(1,bbox.width), targetH / Math.max(1,bbox.height));
-    const finalSize = Math.max(logicalMin, Math.min(logicalMax, Math.floor(baseFont * Math.min(1, scale))));
+    let bbox = textEl.getBBox();
+    let scale = Math.min(targetW / Math.max(1,bbox.width), targetH / Math.max(1,bbox.height));
+    let finalSize = Math.max(logicalMin, Math.min(logicalMax, Math.floor(baseFont * Math.min(1, scale))));
 
-    if (finalSize < this.minFont) {
+    // 若仍塞不下，逐步簡化：
+    if (finalSize <= this.minFont) {
+      // a) 只保留代號 + 百分比
+      const tsp = Array.from(textEl.querySelectorAll('tspan'));
+      const fullName = tsp[0]?.textContent || '';
+      const pct      = tsp[1]?.textContent || '';
+      const codeOnly = (fullName.match(/\b\d{4}\b/)||[])[0] || fullName.split(' ')[0] || '';
+      tsp.forEach(t => t.remove());
+      const t1 = document.createElementNS('http://www.w3.org/2000/svg','tspan'); t1.textContent = codeOnly; textEl.appendChild(t1);
+      const t2 = document.createElementNS('http://www.w3.org/2000/svg','tspan'); t2.textContent = pct;      textEl.appendChild(t2);
+      textEl.setAttribute('font-size', this.minFont);
+      this.centerText(textEl, w, h);
+      bbox = textEl.getBBox(); scale = Math.min(targetW / Math.max(1,bbox.width), targetH / Math.max(1,bbox.height));
+      finalSize = Math.max(this.minFont, Math.min(logicalMax, Math.floor(this.minFont * Math.min(1, scale))));
+    }
+
+    if (finalSize <= this.minFont) {
+      // b) 再不行 → 只顯示百分比
+      const tsp = Array.from(textEl.querySelectorAll('tspan'));
+      const pct = tsp[1]?.textContent || tsp[0]?.textContent || '';
+      tsp.forEach(t => t.remove());
+      const t = document.createElementNS('http://www.w3.org/2000/svg','tspan'); t.textContent = pct; textEl.appendChild(t);
+      textEl.setAttribute('font-size', this.minFont);
+      this.centerText(textEl, w, h);
+      bbox = textEl.getBBox(); scale = Math.min(targetW / Math.max(1,bbox.width), targetH / Math.max(1,bbox.height));
+      finalSize = Math.max(this.minFont, Math.min(logicalMax, Math.floor(this.minFont * Math.min(1, scale))));
+    }
+
+    if (finalSize < this.minFont * 0.95) {
+      // c) 仍然不行 → 隱藏
       textEl.setAttribute('display','none');
       return;
     }
@@ -208,6 +239,7 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
   const wrap=svg.node().parentElement; const W=wrap.clientWidth-16; const H=parseInt(getComputedStyle(svg.node()).height)||560;
   svg.attr('width',W).attr('height',H);
 
+  // ====== 分群 ======
   const groups=new Map();
   for(const e of edges){
     const rel=normText(e['關係類型']||'未分類'); const key=normCode(e[codeField]); const r=byCode.get(key);
@@ -218,15 +250,21 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
     groups.get(rel).push({ code:codeVal, name:nameVal, value:Math.max(0.01,Math.abs(v)), raw:v });
   }
 
-  const hint=document.getElementById(hintId);
-  if(groups.size===0){ hint.textContent='此區在選定月份沒有可用數據'; return; } else { hint.textContent=''; }
+  // ====== 僅保留前 8 大類（依個股數量多寡） ======
+  const entries = Array.from(groups.entries());
+  entries.sort((a,b)=> b[1].length - a[1].length);
+  const kept = new Map(entries.slice(0,8));
 
-  const children=[]; for(const [rel,list] of groups){ const avg=d3.mean(list,d=>d.raw);
+  const hint=document.getElementById(hintId);
+  if(kept.size===0){ hint.textContent='此區在選定月份沒有可用數據'; return; } else { hint.textContent=''; }
+
+  const children=[]; for(const [rel,list] of kept){ const avg=d3.mean(list,d=>d.raw);
     const kids=list.map(s=>({ name: s.name||'', code:s.code, value:Math.max(0.01,Math.abs(s.raw)), raw:s.raw }));
     children.push({ name:rel, avg, children:kids }); }
 
+  const HEADER_H = 22; // 與 treemap().paddingTop(HEADER_H) 一致
   const root=d3.hierarchy({ children }).sum(d=>d.value).sort((a,b)=>(b.value||0)-(a.value||0));
-  d3.treemap().size([W,H]).paddingOuter(8).paddingInner(3).paddingTop(22)(root);
+  d3.treemap().size([W,H]).paddingOuter(8).paddingInner(3).paddingTop(HEADER_H)(root);
 
   const g=svg.append('g');
 
@@ -240,27 +278,30 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
     .attr('x',d=>d.x0).attr('y',d=>d.y0)
     .attr('width',d=>Math.max(0,d.x1-d.x0)).attr('height',d=>Math.max(0,d.y1-d.y0));
 
-  // 類股標題：字級依群組面積 scaling（sqrt-area），越小群組字越小
-  const titles = parents.append('text').attr('class','node-title').text(null);
+  // 類股標題：靠左 + 在 HEADER_H 區塊的「垂直置中」；字級仍依群組面積而變
+  const titles = parents.append('text')
+    .attr('class','node-title')
+    .attr('text-anchor','start')
+    .attr('dominant-baseline','middle')
+    .style('paint-order','stroke')
+    .style('stroke','rgba(0,0,0,0.35)')
+    .style('stroke-width','2px')
+    .attr('fill','#fff');
+
   titles.each(function(d){
     const w = Math.max(0, d.x1 - d.x0), h = Math.max(0, d.y1 - d.y0);
     const area = w * h; const kGroup = 0.085; // 可微調：0.08~0.10
     const fs = Math.max(11, Math.min(22, Math.floor(Math.sqrt(area) * kGroup)));
     const el = d3.select(this)
       .attr('x', d.x0 + 6)
-      .attr('y', d.y0 + fs)   // 以字級自適應上邊距
-      .attr('font-size', fs)
-      .attr('fill', '#fff')
-      .style('paint-order','stroke')
-      .style('stroke','rgba(0,0,0,0.35)')
-      .style('stroke-width','2px');
-    const nameSpan = document.createElementNS('http://www.w3.org/2000/svg','tspan');
-    nameSpan.textContent = d.data.name;
-    el.node().appendChild(nameSpan);
-    if (fs >= 13) { // 小群組就只留名稱
-      const sep = document.createElementNS('http://www.w3.org/2000/svg','tspan'); sep.textContent = '  平均：'; sep.setAttribute('dx','6');
-      const val = document.createElementNS('http://www.w3.org/2000/svg','tspan'); val.textContent = displayPct(d.data.avg);
-      el.node().appendChild(sep); el.node().appendChild(val);
+      .attr('y', d.y0 + HEADER_H/2)   // 垂直固定在 header 之中，不會上下飄
+      .attr('font-size', fs);
+
+    // 清空並重建（用 tspan 是為了之後可加更多欄位）
+    this.textContent = '';
+    const t1 = document.createElementNS('http://www.w3.org/2000/svg','tspan'); t1.textContent = d.data.name; this.appendChild(t1);
+    if (fs >= 13) { // 小群組只顯示名稱
+      const t2 = document.createElementNS('http://www.w3.org/2000/svg','tspan'); t2.textContent = `  平均：${displayPct(d.data.avg)}`; t2.setAttribute('dx','6'); this.appendChild(t2);
     }
   });
 
