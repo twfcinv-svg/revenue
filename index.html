@@ -76,11 +76,9 @@
   <!-- 依序載入：app.js → 自動縮放字體（含 hook） → Treemap 個股點擊 → B法查詢開連結 -->
   <script>
     document.write('<script src="app.js?v='+VER+'"><\/script>');
-    document.write('<script src="treemap-autofont.js?v='+VER+'"><\/script>');
-    document.write('<script src="treemap-autofont-hook.js?v='+VER+'"><\/script>');
+    document.write('<script src="d3-treemap-autofont.js?v='+VER+'"><\/script>');
     document.write('<script src="stock-link-plugin.js?v='+VER+'"><\/script>');
     document.write('<script src="app_query_link_B.js?v='+VER+'"><\/script>');
-    document.write('<script src="d3-treemap-autofont.js?v='+VER+'"><\/script>');
   </script>
 </body>
 </html>
