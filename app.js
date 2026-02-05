@@ -1,8 +1,7 @@
-/* app.js — v3 修正：
- 1) 「月份讀不到」：改用 header row 直接解析欄名（不依賴第一列資料），建立 COL_MAP + months。
- 2) 下載鏈結改到右上角（固定定位），底色白、深色字，避免干擾排版；舊位置（若有）隱藏。
- 3) 整合 B 法：查詢完成後自動呼叫 window.setResultChipLink(code, name, extra)。
- 4) 保留 v2 的效能優化（Links 預索引、移除 getBBox、分幀渲染）。
+/* app.js — v3.1 修正標籤重疊：
+ 1) Treemap 葉節點標籤改為「2 行區塊（名稱/數值）+ 動態字級 + clipPath」
+ 2) 量測僅在渲染完成後進行一次 getBBox（批次），避免反覆 reflow。
+ 3) 保留 v2 的效能優化（Links 預索引、分幀渲染）；僅在標籤調整階段使用最少量量測。
 */
 
 const URL_VER = new URLSearchParams(location.search).get('v') || Date.now();
@@ -160,7 +159,7 @@ function handleRun(){
     const nameLabel = (rowSelf['名稱'] || rowSelf['公司名稱'] || rowSelf['證券名稱'] || '').trim();
     const extra = `${month.slice(0,4)}/${month.slice(4,6)} · ${metric}`;
     if (window.setResultChipLink) window.setResultChipLink(codeLabel, nameLabel, extra);
-  }catch(_){}
+  }catch(_){ }
 
   const upstreamEdges   = linksByDown.get(codeKey) || [];
   const downstreamEdges = linksByUp.get(codeKey)   || [];
@@ -187,6 +186,65 @@ function renderResultChip(selfRow, month, metric, colorMode){
     </div>`;
 }
 
+// ====== 新增：標籤自動縮放與裁切工具 ======
+const LabelFit = {
+  padding: 8,
+  maxFont: 18,
+  minFont: 9,
+  lineHeight: 1.15,
+
+  centerText(el, w, h) {
+    el.setAttribute('text-anchor', 'middle');
+    el.setAttribute('dominant-baseline', 'middle');
+    el.setAttribute('x', this.padding + Math.max(0, (w - this.padding*2) / 2));
+    el.setAttribute('y', this.padding + Math.max(0, (h - this.padding*2) / 2));
+  },
+
+  ensureClip(gEl, w, h){
+    const svg = gEl.ownerSVGElement;
+    let defs = svg.querySelector('defs');
+    if (!defs) defs = svg.insertBefore(document.createElementNS('http://www.w3.org/2000/svg','defs'), svg.firstChild);
+    const id = gEl.dataset.clipId || ('clip-' + Math.random().toString(36).slice(2));
+    gEl.dataset.clipId = id;
+    let clip = svg.querySelector('#'+id);
+    if (!clip){
+      clip = document.createElementNS('http://www.w3.org/2000/svg','clipPath');
+      clip.setAttribute('id', id);
+      const r = document.createElementNS('http://www.w3.org/2000/svg','rect');
+      clip.appendChild(r);
+      defs.appendChild(clip);
+    }
+    const rect = clip.firstChild;
+    rect.setAttribute('x', 0);
+    rect.setAttribute('y', 0);
+    rect.setAttribute('width', Math.max(0, w));
+    rect.setAttribute('height', Math.max(0, h));
+    gEl.querySelectorAll('text').forEach(t => t.setAttribute('clip-path', `url(#${id})`));
+  },
+
+  fitBlock(textEl, w, h){
+    const targetW = Math.max(1, w - this.padding*2);
+    const targetH = Math.max(1, h - this.padding*2);
+
+    textEl.setAttribute('font-size', this.maxFont);
+    this.centerText(textEl, w, h);
+
+    const bbox = textEl.getBBox();
+    if (!bbox.width || !bbox.height) return;
+
+    const scale = Math.min(targetW / bbox.width, targetH / bbox.height);
+    const finalSize = Math.floor(this.maxFont * scale);
+
+    if (finalSize < this.minFont) {
+      textEl.setAttribute('display','none');
+    } else {
+      textEl.removeAttribute('display');
+      textEl.setAttribute('font-size', finalSize);
+      this.centerText(textEl, w, h);
+    }
+  }
+};
+
 function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode){
   const svg=d3.select('#'+svgId); svg.selectAll('*').remove();
   const wrap=svg.node().parentElement;
@@ -205,7 +263,7 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
     if(!groups.has(rel)) groups.set(rel,[]);
     const codeVal = r['個股'] ?? r['代號'] ?? r['股票代碼'] ?? r['股票代號'] ?? r['公司代號'] ?? r['證券代號'];
     const nameVal = r['名稱'] ?? r['公司名稱'] ?? r['證券名稱'];
-    groups.get(rel).push({ code:codeVal, name:nameVal, value:v });
+    groups.get(rel).push({ code:codeVal, name:nameVal, value:Math.max(0.01,Math.abs(v)), raw:v });
   }
 
   const hint=document.getElementById(hintId);
@@ -213,8 +271,8 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
 
   const children=[];
   for(const [rel,list] of groups){
-    const avg=d3.mean(list,d=>d.value);
-    const kids=list.map(s=>({ name: s.name||'', code:s.code, value:Math.max(0.01,Math.abs(s.value)), raw:s.value }));
+    const avg=d3.mean(list,d=>d.raw);
+    const kids=list.map(s=>({ name: s.name||'', code:s.code, value:Math.max(0.01,Math.abs(s.raw)), raw:s.raw }));
     children.push({ name:rel, avg, children:kids });
   }
 
@@ -236,12 +294,50 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
     .attr('x', d=>d.x0+6).attr('y', d=>d.y0+16)
     .text(d=>`${d.data.name}  平均：${displayPct(d.data.avg)}`);
 
-  // 葉節點（個股）— 固定字級，避免逐節點 getBBox 造成 reflow 卡頓
+  // 葉節點（個股）— 先建立，再批次 fit
   const node=g.selectAll('g.node').data(root.leaves()).enter().append('g').attr('class','node').attr('transform',d=>`translate(${d.x0},${d.y0})`);
   node.append('rect').attr('class','node-rect')
     .attr('width',d=>Math.max(0,d.x1-d.x0)).attr('height',d=>Math.max(0,d.y1-d.y0))
     .attr('fill', d=> colorFor(d.data.raw, colorMode));
-  node.append('text').attr('class','node-line').attr('x',6).attr('y',16)
-    .attr('font-size', 11)
-    .text(d=>`${(d.data.code||'')} ${safe(d.data.name||'')} ${displayPct(d.data.raw)}`);
+
+  const labels = node.append('text')
+    .attr('class','node-label')
+    .attr('fill','#fff')
+    .style('paint-order','stroke')
+    .style('stroke','rgba(0,0,0,0.35)')
+    .style('stroke-width','2px');
+
+  labels.each(function(d){
+    const name = `${d.data.code||''} ${d.data.name||''}`.trim();
+    const vstr = displayPct(d.data.raw);
+    const t1 = document.createElementNS('http://www.w3.org/2000/svg','tspan');
+    t1.setAttribute('x','0');
+    t1.setAttribute('dy','0');
+    t1.textContent = name;
+
+    const t2 = document.createElementNS('http://www.w3.org/2000/svg','tspan');
+    t2.setAttribute('x','0');
+    t2.setAttribute('dy', `${LabelFit.lineHeight}em`);
+    t2.textContent = vstr;
+
+    this.appendChild(t1);
+    this.appendChild(t2);
+
+    // title 作為 tooltip 顯示完整資訊
+    const title = document.createElementNS('http://www.w3.org/2000/svg','title');
+    title.textContent = `${name} ${vstr}`;
+    this.appendChild(title);
+  });
+
+  // 批次縮排與裁切（rAF 確保元素已插入）
+  requestAnimationFrame(()=>{
+    node.each(function(d){
+      const w = Math.max(0, d.x1 - d.x0);
+      const h = Math.max(0, d.y1 - d.y0);
+      const textEl = this.querySelector('text');
+      if (!textEl) return;
+      LabelFit.fitBlock(textEl, w, h);
+      LabelFit.ensureClip(this, w, h);
+    });
+  });
 }
