@@ -1,47 +1,39 @@
-/* app.js — 欄位自動對齊＋查詢卡片變色＋下載連結白色（請覆蓋既有檔案） */
+/* app.js — v2 性能修正版：
+ 1) 預先索引 Links（上/下游）
+ 2) 避免每個葉節點呼叫 getBBox（大量節點會讓瀏覽器卡死）
+ 3) 更嚴謹的 normText（顯式 Unicode 範圍）
+*/
 
-// 版本參數（避免快取）
 const URL_VER = new URLSearchParams(location.search).get('v') || Date.now();
-// 以相對路徑組合，確保在 GitHub Pages 專案站點 repo 子路徑下也可正確讀取
 const XLSX_FILE = new URL(`./data.xlsx?v=${URL_VER}`, location.href).toString();
-
-// 工作表名稱
 const REVENUE_SHEET = 'Revenue';
 const LINKS_SHEET   = 'Links';
-
-// 指標對照
 const COL_SUFFIX = { YoY:'年成長', MoM:'月變動' };
-
-// 欄位別名（不同資料來源的表頭容錯）
 const CODE_FIELDS = ['個股','代號','股票代碼','股票代號','公司代號','證券代號'];
 const NAME_FIELDS = ['名稱','公司名稱','證券名稱'];
-
-// 每個月份對應到實際欄位名（避免括號/全半形等差異）
-// 形如：COL_MAP['202512'] = { YoY: '202512單月合併營收年成長（％）', MoM: '...' }
 const COL_MAP = {};
 
 let revenueRows = [], linksRows = [], months = [];
 let byCode = new Map();
 let byName = new Map();
+let linksByUp = new Map();   // key: 上游代號（被當作對方的上游）
+let linksByDown = new Map(); // key: 下游代號
 
-// --------- 工具函式 ---------
 function z(s){ return String(s==null?'':s); }
 function toHalfWidth(str){ return z(str).replace(/[０-９Ａ-Ｚａ-ｚ]/g, ch=>String.fromCharCode(ch.charCodeAt(0)-0xFEE0)); }
-function normText(s){ return z(s).replace(/[​-‍﻿]/g,'').replace(/[　]/g,' ').replace(/\s+/g,' ').trim(); }
-function normCode(s){ return toHalfWidth(z(s)).replace(/[​-‍﻿]/g,'').replace(/\s+/g,'').trim(); }
+// 嚴謹版本：移除零寬空白/連字/不換行 BOM 等隱形字元
+function normText(s){ return z(s).replace(/[\u200B-\u200D\uFEFF]/g,'').replace(/[\u3000]/g,' ').replace(/\s+/g,' ').trim(); }
+function normCode(s){ return toHalfWidth(z(s)).replace(/[\u200B-\u200D\uFEFF]/g,'').replace(/\s+/g,'').trim(); }
 function displayPct(v){ if(v==null||!isFinite(v)) return '—'; const s=v.toFixed(1)+'%'; return v>0?('+'+s):s; }
 function colorFor(v, mode){ if(v==null||!isFinite(v)) return '#0f172a'; const t=Math.min(1,Math.abs(v)/80); const alpha=0.25+0.35*t; const good=(mode==='greenPositive'); const pos=good?'16,185,129':'239,68,68'; const neg=good?'239,68,68':'16,185,129'; const rgb=(v>=0)?pos:neg; return `rgba(${rgb},${alpha})`; }
 function safe(s){ return z(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c])); }
 
-// --------- 進入點 ---------
 window.addEventListener('DOMContentLoaded', async()=>{
-  // 下載連結白色 & 帶版本
   const a=document.getElementById('dlData'); if(a){ a.href='data.xlsx?v='+URL_VER; a.style.color='#fff'; }
   try{ await loadWorkbook(); initControls(); }catch(e){ console.error(e); alert('載入失敗：'+e.message); }
   document.querySelector('#runBtn')?.addEventListener('click', handleRun);
 });
 
-// --------- 載入與索引 ---------
 async function loadWorkbook(){
   const res = await fetch(XLSX_FILE, { cache:'no-store' });
   if(!res.ok) throw new Error('讀取 data.xlsx 失敗 HTTP '+res.status);
@@ -55,9 +47,8 @@ async function loadWorkbook(){
   revenueRows = XLSX.utils.sheet_to_json(wsRev,   { defval:null });
   linksRows   = XLSX.utils.sheet_to_json(wsLinks, { defval:null });
 
-  byCode.clear(); byName.clear();
+  byCode.clear(); byName.clear(); linksByUp.clear(); linksByDown.clear();
 
-  // 1) 依實際欄位名建立代號/名稱索引
   const sample = revenueRows[0] || {};
   const codeKeyName = CODE_FIELDS.find(k => k in sample) || '個股';
   const nameKeyName = NAME_FIELDS.find(k => k in sample) || '名稱';
@@ -69,46 +60,35 @@ async function loadWorkbook(){
     if(name) byName.set(name, r);
   }
 
-  // 2) 掃描表頭 → 建立月份清單與欄位對照（保留原始欄名）
+  // 建立月份對照
   const found = new Set();
   for(const rawHeader of Object.keys(sample)){
     const h = normText(rawHeader);
-
-    // 年成長（YoY）
     let m = h.match(/^(\d{4})[\/年-]?\s*(\d{1,2})\s*單月合併營收\s*年[成增]長\s*[\(（]?\s*(?:%|％)\s*[\)）]?$/);
-    if(m){
-      const ym = m[1] + String(m[2]).padStart(2,'0');
-      COL_MAP[ym] = COL_MAP[ym] || {};
-      COL_MAP[ym].YoY = rawHeader; // 用原始表頭名稱取值
-      found.add(ym);
-      continue;
-    }
-    // 月變動（MoM）
+    if(m){ const ym=m[1]+String(m[2]).padStart(2,'0'); (COL_MAP[ym]??=( {} )).YoY = rawHeader; found.add(ym); continue; }
     m = h.match(/^(\d{4})[\/年-]?\s*(\d{1,2})\s*單月合併營收\s*月[變增]動\s*[\(（]?\s*(?:%|％)\s*[\)）]?$/);
-    if(m){
-      const ym = m[1] + String(m[2]).padStart(2,'0');
-      COL_MAP[ym] = COL_MAP[ym] || {};
-      COL_MAP[ym].MoM = rawHeader;
-      found.add(ym);
-      continue;
-    }
+    if(m){ const ym=m[1]+String(m[2]).padStart(2,'0'); (COL_MAP[ym]??=( {} )).MoM = rawHeader; found.add(ym); continue; }
   }
   months = Array.from(found).sort((a,b)=>b.localeCompare(a));
+
+  // 預先索引 Links：避免每次查詢都全表掃描
+  for(const e of linksRows){
+    const up   = normCode(e['上游代號']);
+    const down = normCode(e['下游代號']);
+    if (up)   { if(!linksByUp.has(up))   linksByUp.set(up, []);   linksByUp.get(up).push(e); }
+    if (down) { if(!linksByDown.has(down)) linksByDown.set(down, []); linksByDown.get(down).push(e); }
+  }
 }
 
 function initControls(){
   const sel=document.querySelector('#monthSelect');
   sel.innerHTML='';
   for(const m of months){
-    const o=document.createElement('option');
-    o.value=m;
-    o.textContent=`${m.slice(0,4)}年${m.slice(4,6)}月`;
-    sel.appendChild(o);
+    const o=document.createElement('option'); o.value=m; o.textContent=`${m.slice(0,4)}年${m.slice(4,6)}月`; sel.appendChild(o);
   }
   if(!sel.value && months.length>0) sel.value=months[0];
 }
 
-// 依據 COL_MAP 讀取實際欄位，容錯移除百分號
 function getMetricValue(row, month, metric){
   if(!row || !month || !metric) return null;
   const col = (COL_MAP[month] || {})[metric];
@@ -120,7 +100,6 @@ function getMetricValue(row, month, metric){
   return Number.isFinite(v) ? v : null;
 }
 
-// --------- 查詢 ---------
 function handleRun(){
   const raw     = document.querySelector('#stockInput').value;
   const month   = (document.querySelector('#monthSelect')?.value)||'';
@@ -133,7 +112,6 @@ function handleRun(){
   let rowSelf = byCode.get(codeKey);
 
   if(!rowSelf){
-    // 名稱完整或前綴比對
     const nameQ = normText(raw);
     rowSelf = byName.get(nameQ) || revenueRows.find(r => normText(r['名稱']||r['公司名稱']||r['證券名稱']||'').startsWith(nameQ));
     if(rowSelf){
@@ -146,15 +124,20 @@ function handleRun(){
 
   if(!rowSelf){ alert('找不到此代號/名稱'); return; }
 
-  const upstreamEdges   = linksRows.filter(r => normCode(r['下游代號']) === codeKey);
-  const downstreamEdges = linksRows.filter(r => normCode(r['上游代號']) === codeKey);
+  // 使用預索引，避免在大量資料上兩次 filter
+  const upstreamEdges   = linksByDown.get(codeKey) || []; // 下游=自己 => 找上游群
+  const downstreamEdges = linksByUp.get(codeKey)   || []; // 上游=自己 => 找下游群
 
-  renderResultChip(rowSelf, month, metric, colorMode);
-  renderTreemap('upTreemap','upHint',   upstreamEdges,  '上游代號', month, metric, colorMode);
-  renderTreemap('downTreemap','downHint',downstreamEdges,'下游代號', month, metric, colorMode);
+  // 讓渲染分幀，避免主執行緒長時間阻塞
+  requestAnimationFrame(()=>{
+    renderResultChip(rowSelf, month, metric, colorMode);
+    renderTreemap('upTreemap','upHint',   upstreamEdges,  '上游代號', month, metric, colorMode);
+  });
+  requestAnimationFrame(()=>{
+    renderTreemap('downTreemap','downHint',downstreamEdges,'下游代號', month, metric, colorMode);
+  });
 }
 
-// --------- 呈現 ---------
 function renderResultChip(selfRow, month, metric, colorMode){
   const host=document.querySelector('#resultChip');
   const v=getMetricValue(selfRow,month,metric);
@@ -204,7 +187,7 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
 
   const g=svg.append('g');
 
-  // 群組底色（先畫）
+  // 群組底色
   const parents=g.selectAll('g.parent').data(root.children||[]).enter().append('g').attr('class','parent');
   parents.append('rect').attr('class','group-bg')
     .attr('x',d=>d.x0).attr('y',d=>d.y0)
@@ -217,12 +200,12 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
     .attr('x', d=>d.x0+6).attr('y', d=>d.y0+16)
     .text(d=>`${d.data.name}  平均：${displayPct(d.data.avg)}`);
 
-  // 葉節點（個股）— 單行：代號 中文名 數值
+  // 葉節點（個股）— 為避免卡頓：取消逐個 getBBox 量測，只用固定字級，長度過長靠 CSS/視覺容忍
   const node=g.selectAll('g.node').data(root.leaves()).enter().append('g').attr('class','node').attr('transform',d=>`translate(${d.x0},${d.y0})`);
   node.append('rect').attr('class','node-rect')
     .attr('width',d=>Math.max(0,d.x1-d.x0)).attr('height',d=>Math.max(0,d.y1-d.y0))
     .attr('fill', d=> colorFor(d.data.raw, colorMode));
   node.append('text').attr('class','node-line').attr('x',6).attr('y',16)
-    .text(d=>`${(d.data.code||'')} ${safe(d.data.name||'')} ${displayPct(d.data.raw)}`)
-    .each(function(d){ const w=d.x1-d.x0; if(this.getBBox().width>w-8){ d3.select(this).attr('opacity',0.9).attr('font-size',10); }});
+    .attr('font-size', 11)
+    .text(d=>`${(d.data.code||'')} ${safe(d.data.name||'')} ${displayPct(d.data.raw)}`);
 }
