@@ -1,7 +1,10 @@
-/* app.js — v3.7
- * 新增：Treemap 面積改為「簽名值平移」(signed shift) 決定，保證正值面積 > 負值面積。
- * 說明：對單次繪製（上游/下游）所有葉節點，取 minRaw，面積 value = max(EPS, raw - minRaw + EPS)。
- * 其餘沿用 v3.6（標籤保留策略、連續縮小、clip 內縮、前 8 類、群組標題靠左中）。
+/* app.js — v3.8
+ * 改善：
+ *  1) 類股標題絕不溢出：對 header 區塊建立 clipPath，並以 GroupTitleFit 動態縮放字級；
+ *     名稱太長會逐字省略(…)，必要時僅保留「平均：xx%」，但平均值永不消失。
+ *  2) 個股文字行為沿用 v3.7（由豐到簡、最小 4px、clip 內縮、動態 padding）。
+ *  3) 類股面積 = 類股平均數值(簽名值平移)；
+ *     先以葉節點的 base 值保留相對比例，再縮放使整個群組總和 = groupWeight(由平均值決定)。
  */
 
 const URL_VER = new URLSearchParams(location.search).get('v') || Date.now();
@@ -149,115 +152,63 @@ function renderResultChip(selfRow, month, metric, colorMode){
     </div>`;
 }
 
-// ========= 字級與裁切工具（沿用 v3.6） =========
+// ========= 葉節點字級與裁切（v3.7 延用） =========
 const LabelFit = {
   paddingBase: 8,
-  maxFont: 36,      // 全域上限（保護特大格）
-  minFontSoft: 9,   // 希望維持的可讀下限（可低於它）
-  minFontHard: 4,   // 真的塞不下時的硬下限
+  maxFont: 36,
+  minFontSoft: 9,
+  minFontHard: 4,
   lineHeight: 1.15,
 
-  dynPadding(w,h){
-    const m = Math.min(w,h);
-    return Math.max(2, Math.min(this.paddingBase, Math.floor(m * 0.08))); // 更保守
-  },
+  dynPadding(w,h){ const m=Math.min(w,h); return Math.max(2, Math.min(this.paddingBase, Math.floor(m*0.08))); },
+  centerText(el,w,h,p){ el.setAttribute('text-anchor','middle'); el.setAttribute('dominant-baseline','middle'); el.setAttribute('x', p + Math.max(0,(w-p*2)/2)); el.setAttribute('y', p + Math.max(0,(h-p*2)/2)); },
+  ensureClip(gEl,w,h){ const inset=2; const svg=gEl.ownerSVGElement; let defs=svg.querySelector('defs'); if(!defs) defs=svg.insertBefore(document.createElementNS('http://www.w3.org/2000/svg','defs'), svg.firstChild); const id=gEl.dataset.clipId||('clip-'+Math.random().toString(36).slice(2)); gEl.dataset.clipId=id; let clip=svg.querySelector('#'+id); if(!clip){ clip=document.createElementNS('http://www.w3.org/2000/svg','clipPath'); clip.setAttribute('id',id); const r=document.createElementNS('http://www.w3.org/2000/svg','rect'); clip.appendChild(r); defs.appendChild(clip);} const rect=clip.firstChild; rect.setAttribute('x',inset); rect.setAttribute('y',inset); rect.setAttribute('width',Math.max(0,w-inset*2)); rect.setAttribute('height',Math.max(0,h-inset*2)); gEl.querySelectorAll('text').forEach(t=>t.setAttribute('clip-path',`url(#${id})`)); },
+  ellipsizeNameToWidth(textEl,maxW){ const t1=textEl.querySelector('tspan'); if(!t1) return; const full=t1.textContent||''; const m=full.match(/^(\d{4})\s*(.*)$/); let code='', name=full; if(m){ code=m[1]; name=m[2]||''; } t1.textContent=code+(name?(' '+name):''); while(t1.getComputedTextLength()>maxW && name.length>0){ name=name.slice(0,-1); t1.textContent=code+(name?(' '+name+'…'):''); } },
+  fitBlock(textEl,w,h){ const p=this.dynPadding(w,h); const targetW=Math.max(1,w-p*2), targetH=Math.max(1,h-p*2); const code=textEl.dataset.code||''; const name=textEl.dataset.name||''; const pct=textEl.dataset.pct||''; const layouts=[ ()=>[`${code}${name?(' '+name):''}`, pct], ()=>[code, pct], ()=>[pct] ]; const k=0.12; const areaFont=Math.sqrt(targetW*targetH)*k; const logicalMax=Math.min(this.maxFont, Math.floor(targetH*0.5)); for(const L of layouts){ while(textEl.firstChild) textEl.removeChild(textEl.firstChild); L().forEach(s=>{ const t=document.createElementNS('http://www.w3.org/2000/svg','tspan'); t.textContent=s; textEl.appendChild(t); }); let f=Math.max(this.minFontHard, Math.min(logicalMax, Math.floor(areaFont))); textEl.setAttribute('font-size',f); this.centerText(textEl,w,h,p); this.ellipsizeNameToWidth(textEl, targetW); let guard=0; while(guard++<60){ const bb=textEl.getBBox(); const sW=targetW/Math.max(1,bb.width), sH=targetH/Math.max(1,bb.height); const s=Math.min(sW,sH,1); const next=Math.max(this.minFontHard, Math.floor(f*s)); if(next<f){ f=next; textEl.setAttribute('font-size',f); this.centerText(textEl,w,h,p); continue; } if(sW<1 && f<=this.minFontHard){ this.ellipsizeNameToWidth(textEl, targetW); } break; } const tsp=textEl.querySelectorAll('tspan'); const n=Math.max(1,tsp.length); const offsetEm=-((n-1)*this.lineHeight/2); tsp.forEach((t,i)=>{ t.setAttribute('x', textEl.getAttribute('x')); t.setAttribute('dy', i===0?`${offsetEm}em`:`${this.lineHeight}em`); }); const box=textEl.getBBox(); if(box.width<=targetW+0.1 && box.height<=targetH+0.1){ textEl.removeAttribute('display'); return; } } textEl.setAttribute('display','none'); }
+};
 
-  centerText(el, w, h, pad) {
-    el.setAttribute('text-anchor', 'middle');
-    el.setAttribute('dominant-baseline', 'middle');
-    el.setAttribute('x', pad + Math.max(0, (w - pad*2) / 2));
-    el.setAttribute('y', pad + Math.max(0, (h - pad*2) / 2));
-  },
+// ========= 類股標題自動縮放（不溢出，平均值永不消失） =========
+const GroupTitleFit = {
+  minFont: 6,
+  lineHeight: 1.1,
+  inset: 2,
+  // 建立/更新 header clipPath，僅套在標題
+  ensureHeaderClip(svg, gEl, d, headerH){ const id = gEl.dataset.headerClipId || ('hclip-'+Math.random().toString(36).slice(2)); gEl.dataset.headerClipId = id; let defs = svg.querySelector('defs'); if(!defs) defs = svg.insertBefore(document.createElementNS('http://www.w3.org/2000/svg','defs'), svg.firstChild); let clip = svg.querySelector('#'+id); if(!clip){ clip = document.createElementNS('http://www.w3.org/2000/svg','clipPath'); clip.setAttribute('id', id); const r=document.createElementNS('http://www.w3.org/2000/svg','rect'); clip.appendChild(r); defs.appendChild(clip); } const r = clip.firstChild; const w = Math.max(0, d.x1-d.x0), h = Math.max(0, headerH); r.setAttribute('x', d.x0 + this.inset); r.setAttribute('y', d.y0 + this.inset); r.setAttribute('width', Math.max(0, w - this.inset*2)); r.setAttribute('height', Math.max(0, h - this.inset*2)); return `url(#${id})`; },
+  fit(text, d, headerH){
+    const svg = text.ownerSVGElement; const w = Math.max(0, d.x1-d.x0) - this.inset*2; const h = Math.max(0, headerH) - this.inset*2; if(w<=0||h<=0) return;
+    // 內容：名稱 + 固定存在的平均值
+    const name = d.data.name || ''; const avgStr = `平均：${displayPct(d.data.avg)}`;
+    // 清空並建立兩個 tspan（名稱放前、平均放後）
+    while(text.firstChild) text.removeChild(text.firstChild);
+    const tName = document.createElementNS('http://www.w3.org/2000/svg','tspan'); tName.textContent = name; text.appendChild(tName);
+    const tSep  = document.createElementNS('http://www.w3.org/2000/svg','tspan'); tSep.textContent = '  '; text.appendChild(tSep);
+    const tAvg  = document.createElementNS('http://www.w3.org/2000/svg','tspan'); tAvg.textContent = avgStr; text.appendChild(tAvg);
 
-  ensureClip(gEl, w, h){
-    const inset = 2; // 內縮 2px
-    const svg = gEl.ownerSVGElement; let defs = svg.querySelector('defs');
-    if (!defs) defs = svg.insertBefore(document.createElementNS('http://www.w3.org/2000/svg','defs'), svg.firstChild);
-    const id = gEl.dataset.clipId || ('clip-' + Math.random().toString(36).slice(2)); gEl.dataset.clipId = id;
-    let clip = svg.querySelector('#'+id);
-    if (!clip){ clip = document.createElementNS('http://www.w3.org/2000/svg','clipPath'); clip.setAttribute('id', id);
-      const r = document.createElementNS('http://www.w3.org/2000/svg','rect'); clip.appendChild(r); defs.appendChild(clip); }
-    const rect = clip.firstChild; rect.setAttribute('x', inset); rect.setAttribute('y', inset);
-    rect.setAttribute('width', Math.max(0, w - inset*2)); rect.setAttribute('height', Math.max(0, h - inset*2));
-    gEl.querySelectorAll('text').forEach(t => t.setAttribute('clip-path', `url(#${id})`));
-  },
+    // 初始字級：依 header 面積估一個基準，再夾取
+    const k = 0.1; let f = Math.max(this.minFont, Math.floor(Math.sqrt(Math.max(1,w*h))*k)); f = Math.min(f, Math.floor(h*0.9));
+    text.setAttribute('font-size', f);
+    // 位置：靠左、垂直在 header 中線
+    text.setAttribute('text-anchor','start'); text.setAttribute('dominant-baseline','middle'); text.setAttribute('x', d.x0 + this.inset + 4); text.setAttribute('y', d.y0 + headerH/2);
+    // clip 到 header 區域
+    const clipUrl = this.ensureHeaderClip(svg, text.parentNode, d, headerH); text.setAttribute('clip-path', clipUrl);
 
-  ellipsizeNameToWidth(textEl, maxWidth){
-    const t1 = textEl.querySelector('tspan');
-    if (!t1) return;
-    const full = t1.textContent || '';
-    const m = full.match(/^(\d{4})\s*(.*)$/);
-    let code = '', name = full;
-    if (m){ code = m[1]; name = m[2] || ''; }
-    t1.textContent = code + (name ? (' ' + name) : '');
-    while (t1.getComputedTextLength() > maxWidth && name.length > 0){
-      name = name.slice(0, -1);
-      t1.textContent = code + (name ? (' ' + name + '…') : '');
-    }
-  },
-
-  fitBlock(textEl, w, h){
-    const pad = this.dynPadding(w,h);
-    const targetW = Math.max(1, w - pad*2);
-    const targetH = Math.max(1, h - pad*2);
-
-    const code = textEl.dataset.code || '';
-    const name = textEl.dataset.name || '';
-    const pct  = textEl.dataset.pct  || '';
-
-    const tryLayouts = [
-      () => [ `${code}${name?(' '+name):''}`, pct ],
-      () => [ code, pct ],
-      () => [ pct ]
-    ];
-
-    const k = 0.12;
-    const areaFont = Math.sqrt(targetW * targetH) * k;
-    const logicalMax = Math.min(this.maxFont, Math.floor(targetH * 0.5));
-
-    for (let layout of tryLayouts){
-      while (textEl.firstChild) textEl.removeChild(textEl.firstChild);
-      layout().forEach(s=>{
-        const t = document.createElementNS('http://www.w3.org/2000/svg','tspan');
-        t.textContent = s; textEl.appendChild(t);
-      });
-
-      let font = Math.max(this.minFontHard, Math.min(logicalMax, Math.floor(areaFont)));
-      textEl.setAttribute('font-size', font);
-      this.centerText(textEl, w, h, pad);
-
-      this.ellipsizeNameToWidth(textEl, targetW);
-
-      let safety = 0;
-      while (safety++ < 60){
-        const bbox = textEl.getBBox();
-        const scaleW = targetW / Math.max(1,bbox.width);
-        const scaleH = targetH / Math.max(1,bbox.height);
-        const scale = Math.min(scaleW, scaleH, 1);
-        const next = Math.max(this.minFontHard, Math.floor(font * scale));
-        if (next < font){ font = next; textEl.setAttribute('font-size', font); this.centerText(textEl, w, h, pad); continue; }
-        if (scaleW < 1 && font <= this.minFontHard){
-          this.ellipsizeNameToWidth(textEl, targetW);
-        }
-        break;
+    // 量測寬高，若超出則縮小字級；字級到 minFont 後再對「名稱」逐字省略，平均值不被移除
+    let guard=0; const maxW=w; const maxH=h; // 單行
+    while(guard++<40){
+      const bb = text.getBBox();
+      const sW = maxW / Math.max(1, bb.width);
+      const sH = maxH / Math.max(1, bb.height);
+      const s = Math.min(sW, sH, 1);
+      const next = Math.max(this.minFont, Math.floor(f * s));
+      if (next < f){ f = next; text.setAttribute('font-size', f); continue; }
+      // 若已到 minFont 仍超寬 → 逐字省略名稱
+      if (sW < 1 && f <= this.minFont){
+        // 逐字縮短 tName，保留 tAvg
+        let nm = tName.textContent || '';
+        if (nm.length>0){ tName.textContent = nm.slice(0, -1) + '…'; continue; }
       }
-
-      const tspans = Array.from(textEl.querySelectorAll('tspan'));
-      const n = Math.max(1, tspans.length);
-      const offsetEm = -((n - 1) * this.lineHeight / 2);
-      tspans.forEach((tsp,i)=>{
-        tsp.setAttribute('x', textEl.getAttribute('x'));
-        tsp.setAttribute('dy', i===0 ? `${offsetEm}em` : `${this.lineHeight}em`);
-      });
-
-      const box = textEl.getBBox();
-      if (box.width <= targetW + 0.1 && box.height <= targetH + 0.1){
-        textEl.removeAttribute('display');
-        return;
-      }
+      break;
     }
-
-    textEl.setAttribute('display','none');
   }
 };
 
@@ -288,17 +239,29 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
   const hint=document.getElementById(hintId);
   if(kept.size===0){ hint.textContent='此區在選定月份沒有可用數據'; return; } else { hint.textContent=''; }
 
-  // ====== 簽名值平移：全域 minRaw → 面積 value = raw - minRaw + EPS ======
-  const allLeaves = [];
-  for (const [, list] of kept) { for (const s of list) allLeaves.push(s); }
-  const minRaw = d3.min(allLeaves, d => d.raw);
+  // ====== 葉節點 base 值（簽名平移）與 類股平均權重 ======
   const EPS = 0.01;
+  const allLeaves = []; const groupSummaries = [];
+  for (const [rel, list] of kept){
+    const avg = d3.mean(list, d=>d.raw);
+    const minLeafRaw = d3.min(list, d=>d.raw);
+    const baseValues = list.map(s => ({ s, base: Math.max(EPS, (s.raw - minLeafRaw + EPS)) }));
+    const baseSum = d3.sum(baseValues, d=>d.base) || EPS;
+    groupSummaries.push({ rel, list, avg, baseValues, baseSum });
+    baseValues.forEach(x=>allLeaves.push(x.s));
+  }
+  const minAvg = d3.min(groupSummaries, d=>d.avg);
 
+  // 構造 treemap 階層：每組的總面積 = 平移後的平均值；
+  // 組內每個葉節點 = 依 base 值按比例縮放，使 sum == groupWeight。
   const children=[];
-  for(const [rel,list] of kept){
-    const avg=d3.mean(list,d=>d.raw); // 顏色/顯示仍用 signed 平均
-    const kids=list.map(s=>({ name: s.name||'', code:s.code, raw:s.raw, value: Math.max(EPS, (s.raw - minRaw + EPS)) }));
-    children.push({ name:rel, avg, children:kids });
+  for (const g of groupSummaries){
+    const groupWeight = Math.max(EPS, (g.avg - minAvg + EPS));
+    const scale = groupWeight / (g.baseSum || EPS);
+    const kids = g.baseValues.map(({s, base})=>({
+      name: s.name||'', code:s.code, raw:s.raw, value: base * scale
+    }));
+    children.push({ name: g.rel, avg: g.avg, children: kids });
   }
 
   const HEADER_H = 22;
@@ -307,7 +270,7 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
 
   const g=svg.append('g');
 
-  // —— 類股群組 ——
+  // —— 類股群組底與框 ——
   const parents=g.selectAll('g.parent').data(root.children||[]).enter().append('g').attr('class','parent');
   parents.append('rect').attr('class','group-bg')
     .attr('x',d=>d.x0).attr('y',d=>d.y0)
@@ -317,26 +280,15 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
     .attr('x',d=>d.x0).attr('y',d=>d.y0)
     .attr('width',d=>Math.max(0,d.x1-d.x0)).attr('height',d=>Math.max(0,d.y1-d.y0));
 
+  // —— 類股標題（靠左中、絕不溢出、平均值永不消失） ——
   const titles = parents.append('text')
     .attr('class','node-title')
-    .attr('text-anchor','start')
-    .attr('dominant-baseline','middle')
+    .attr('fill','#fff')
     .style('paint-order','stroke')
     .style('stroke','rgba(0,0,0,0.35)')
-    .style('stroke-width','2px')
-    .attr('fill','#fff');
+    .style('stroke-width','2px');
 
-  titles.each(function(d){
-    const w = Math.max(0, d.x1 - d.x0), h = Math.max(0, d.y1 - d.y0);
-    const fs = Math.max(11, Math.min(22, Math.floor(Math.sqrt(w*h) * 0.085)));
-    d3.select(this)
-      .attr('x', d.x0 + 6)
-      .attr('y', d.y0 + 22/2)
-      .attr('font-size', fs);
-    this.textContent = '';
-    const t1 = document.createElementNS('http://www.w3.org/2000/svg','tspan'); t1.textContent = d.data.name; this.appendChild(t1);
-    if (fs >= 13) { const t2 = document.createElementNS('http://www.w3.org/2000/svg','tspan'); t2.textContent = `  平均：${displayPct(d.data.avg)}`; t2.setAttribute('dx','6'); this.appendChild(t2); }
-  });
+  titles.each(function(d){ GroupTitleFit.fit(this, d, HEADER_H); });
 
   // —— 葉節點（個股） ——
   const node=g.selectAll('g.node').data(root.leaves()).enter().append('g').attr('class','node').attr('transform',d=>`translate(${d.x0},${d.y0})`);
