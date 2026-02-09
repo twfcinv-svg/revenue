@@ -1,10 +1,14 @@
-/* app.js — v3.8
- * 改善：
- *  1) 類股標題絕不溢出：對 header 區塊建立 clipPath，並以 GroupTitleFit 動態縮放字級；
- *     名稱太長會逐字省略(…)，必要時僅保留「平均：xx%」，但平均值永不消失。
- *  2) 個股文字行為沿用 v3.7（由豐到簡、最小 4px、clip 內縮、動態 padding）。
- *  3) 類股面積 = 類股平均數值(簽名值平移)；
- *     先以葉節點的 base 值保留相對比例，再縮放使整個群組總和 = groupWeight(由平均值決定)。
+/* app.js — v3.10
+ * 修正 / 新增：
+ *  1) 類股標題『一定跟著格子縮小』：
+ *     - header clipPath 內縮 3px；
+ *     - 單行→兩行自動切換（第1行：名稱可省略；第2行：平均值必顯示）；
+ *     - 反覆量測縮放到最小 5px；名稱逐字省略直到完全塞入；
+ *     - 初次繪製後 & 視窗 resize 時，都會重算一遍避免被擋住。
+ *  2) 個股文字再加強：允許縮到最小 3px（Hard 下限），以確保不溢出；仍維持由豐到簡與 clip 內縮。
+ *  3) 類股面積『柔性強調』：改成『排名加權』(RANK 模式)，只讓平均值高的類股看起來較大、
+ *     但不會壓扁其他類。可用常數調整差距範圍（預設 0.95x ~ 1.55x）。
+ *     若想用 v3.8 的『平均值等比』，把 GROUP_WEIGHT_MODE 改為 'AVG' 即可。
  */
 
 const URL_VER = new URLSearchParams(location.search).get('v') || Date.now();
@@ -14,6 +18,13 @@ const LINKS_SHEET   = 'Links';
 const CODE_FIELDS = ['個股','代號','股票代碼','股票代號','公司代號','證券代號'];
 const NAME_FIELDS = ['名稱','公司名稱','證券名稱'];
 const COL_MAP = {};
+
+// ===== 可調參數 =====
+const HEADER_H = 22;                  // 群組標題列高度（對應 treemap.paddingTop）
+const GROUP_KEEP_MAX = 8;             // 上/下游最多顯示幾個群組
+const GROUP_WEIGHT_MODE = 'RANK';     // 'RANK' 柔性強調 | 'AVG' 依平均值等比（v3.8）
+const RANK_WEIGHT_MIN = 0.95;         // RANK 模式：最小權重因子（越小→最小群組越小）
+const RANK_WEIGHT_MAX = 1.55;         // RANK 模式：最大權重因子（越大→最大群組越大）
 
 let revenueRows = [], linksRows = [], months = [];
 let byCode = new Map();
@@ -48,7 +59,9 @@ async function loadWorkbook(){
   const res = await fetch(XLSX_FILE, { cache:'no-store' });
   if(!res.ok) throw new Error('讀取 data.xlsx 失敗 HTTP '+res.status);
   const buf = await res.arrayBuffer(); const wb  = XLSX.read(buf, { type:'array' });
-  const wsRev = wb.Sheets[REVENUE_SHEET]; const wsLinks = wb.Sheets[LINKS_SHEET];
+
+  const wsRev = wb.Sheets[REVENUE_SHEET];
+  const wsLinks = wb.Sheets[LINKS_SHEET];
   if(!wsRev || !wsLinks) throw new Error('找不到必要工作表 Revenue 或 Links');
 
   const rowsHeaderFirst = XLSX.utils.sheet_to_json(wsRev, { header:1, blankrows:false });
@@ -71,13 +84,16 @@ async function loadWorkbook(){
   const codeKeyName = CODE_FIELDS.find(k => k in sample) || CODE_FIELDS[0];
   const nameKeyName = NAME_FIELDS.find(k => k in sample) || NAME_FIELDS[0];
   for(const r of revenueRows){
-    const code = normCode(r[codeKeyName]); const name = normText(r[nameKeyName]);
-    if(code) byCode.set(code, r); if(name) byName.set(name, r);
+    const code = normCode(r[codeKeyName]);
+    const name = normText(r[nameKeyName]);
+    if(code) byCode.set(code, r);
+    if(name) byName.set(name, r);
   }
 
   linksByUp.clear(); linksByDown.clear();
   for(const e of linksRows){
-    const up   = normCode(e['上游代號']); const down = normCode(e['下游代號']);
+    const up   = normCode(e['上游代號']);
+    const down = normCode(e['下游代號']);
     if (up)   { if(!linksByUp.has(up))   linksByUp.set(up, []);   linksByUp.get(up).push(e); }
     if (down) { if(!linksByDown.has(down)) linksByDown.set(down, []); linksByDown.get(down).push(e); }
   }
@@ -141,8 +157,7 @@ function handleRun(){
 
 function renderResultChip(selfRow, month, metric, colorMode){
   const host=document.querySelector('#resultChip');
-  const v=getMetricValue(selfRow,month,metric);
-  const bg=colorFor(v, colorMode);
+  const v=getMetricValue(selfRow,month,metric); const bg=colorFor(v, colorMode);
   const showCode = selfRow['個股'] || selfRow['代號'] || selfRow['股票代碼'] || selfRow['股票代號'] || selfRow['公司代號'] || selfRow['證券代號'] || '';
   const showName = selfRow['名稱'] || selfRow['公司名稱'] || selfRow['證券名稱'] || '';
   host.innerHTML=`
@@ -152,14 +167,13 @@ function renderResultChip(selfRow, month, metric, colorMode){
     </div>`;
 }
 
-// ========= 葉節點字級與裁切（v3.7 延用） =========
+// ========= 個股標籤適配 =========
 const LabelFit = {
   paddingBase: 8,
   maxFont: 36,
   minFontSoft: 9,
-  minFontHard: 4,
+  minFontHard: 3,      // <- 允許更小，避免溢出
   lineHeight: 1.15,
-
   dynPadding(w,h){ const m=Math.min(w,h); return Math.max(2, Math.min(this.paddingBase, Math.floor(m*0.08))); },
   centerText(el,w,h,p){ el.setAttribute('text-anchor','middle'); el.setAttribute('dominant-baseline','middle'); el.setAttribute('x', p + Math.max(0,(w-p*2)/2)); el.setAttribute('y', p + Math.max(0,(h-p*2)/2)); },
   ensureClip(gEl,w,h){ const inset=2; const svg=gEl.ownerSVGElement; let defs=svg.querySelector('defs'); if(!defs) defs=svg.insertBefore(document.createElementNS('http://www.w3.org/2000/svg','defs'), svg.firstChild); const id=gEl.dataset.clipId||('clip-'+Math.random().toString(36).slice(2)); gEl.dataset.clipId=id; let clip=svg.querySelector('#'+id); if(!clip){ clip=document.createElementNS('http://www.w3.org/2000/svg','clipPath'); clip.setAttribute('id',id); const r=document.createElementNS('http://www.w3.org/2000/svg','rect'); clip.appendChild(r); defs.appendChild(clip);} const rect=clip.firstChild; rect.setAttribute('x',inset); rect.setAttribute('y',inset); rect.setAttribute('width',Math.max(0,w-inset*2)); rect.setAttribute('height',Math.max(0,h-inset*2)); gEl.querySelectorAll('text').forEach(t=>t.setAttribute('clip-path',`url(#${id})`)); },
@@ -167,49 +181,17 @@ const LabelFit = {
   fitBlock(textEl,w,h){ const p=this.dynPadding(w,h); const targetW=Math.max(1,w-p*2), targetH=Math.max(1,h-p*2); const code=textEl.dataset.code||''; const name=textEl.dataset.name||''; const pct=textEl.dataset.pct||''; const layouts=[ ()=>[`${code}${name?(' '+name):''}`, pct], ()=>[code, pct], ()=>[pct] ]; const k=0.12; const areaFont=Math.sqrt(targetW*targetH)*k; const logicalMax=Math.min(this.maxFont, Math.floor(targetH*0.5)); for(const L of layouts){ while(textEl.firstChild) textEl.removeChild(textEl.firstChild); L().forEach(s=>{ const t=document.createElementNS('http://www.w3.org/2000/svg','tspan'); t.textContent=s; textEl.appendChild(t); }); let f=Math.max(this.minFontHard, Math.min(logicalMax, Math.floor(areaFont))); textEl.setAttribute('font-size',f); this.centerText(textEl,w,h,p); this.ellipsizeNameToWidth(textEl, targetW); let guard=0; while(guard++<60){ const bb=textEl.getBBox(); const sW=targetW/Math.max(1,bb.width), sH=targetH/Math.max(1,bb.height); const s=Math.min(sW,sH,1); const next=Math.max(this.minFontHard, Math.floor(f*s)); if(next<f){ f=next; textEl.setAttribute('font-size',f); this.centerText(textEl,w,h,p); continue; } if(sW<1 && f<=this.minFontHard){ this.ellipsizeNameToWidth(textEl, targetW); } break; } const tsp=textEl.querySelectorAll('tspan'); const n=Math.max(1,tsp.length); const offsetEm=-((n-1)*this.lineHeight/2); tsp.forEach((t,i)=>{ t.setAttribute('x', textEl.getAttribute('x')); t.setAttribute('dy', i===0?`${offsetEm}em`:`${this.lineHeight}em`); }); const box=textEl.getBBox(); if(box.width<=targetW+0.1 && box.height<=targetH+0.1){ textEl.removeAttribute('display'); return; } } textEl.setAttribute('display','none'); }
 };
 
-// ========= 類股標題自動縮放（不溢出，平均值永不消失） =========
+// ========= 類股標題（強化版，單/雙行自動） =========
 const GroupTitleFit = {
-  minFont: 6,
-  lineHeight: 1.1,
-  inset: 2,
-  // 建立/更新 header clipPath，僅套在標題
-  ensureHeaderClip(svg, gEl, d, headerH){ const id = gEl.dataset.headerClipId || ('hclip-'+Math.random().toString(36).slice(2)); gEl.dataset.headerClipId = id; let defs = svg.querySelector('defs'); if(!defs) defs = svg.insertBefore(document.createElementNS('http://www.w3.org/2000/svg','defs'), svg.firstChild); let clip = svg.querySelector('#'+id); if(!clip){ clip = document.createElementNS('http://www.w3.org/2000/svg','clipPath'); clip.setAttribute('id', id); const r=document.createElementNS('http://www.w3.org/2000/svg','rect'); clip.appendChild(r); defs.appendChild(clip); } const r = clip.firstChild; const w = Math.max(0, d.x1-d.x0), h = Math.max(0, headerH); r.setAttribute('x', d.x0 + this.inset); r.setAttribute('y', d.y0 + this.inset); r.setAttribute('width', Math.max(0, w - this.inset*2)); r.setAttribute('height', Math.max(0, h - this.inset*2)); return `url(#${id})`; },
-  fit(text, d, headerH){
-    const svg = text.ownerSVGElement; const w = Math.max(0, d.x1-d.x0) - this.inset*2; const h = Math.max(0, headerH) - this.inset*2; if(w<=0||h<=0) return;
-    // 內容：名稱 + 固定存在的平均值
-    const name = d.data.name || ''; const avgStr = `平均：${displayPct(d.data.avg)}`;
-    // 清空並建立兩個 tspan（名稱放前、平均放後）
-    while(text.firstChild) text.removeChild(text.firstChild);
-    const tName = document.createElementNS('http://www.w3.org/2000/svg','tspan'); tName.textContent = name; text.appendChild(tName);
-    const tSep  = document.createElementNS('http://www.w3.org/2000/svg','tspan'); tSep.textContent = '  '; text.appendChild(tSep);
-    const tAvg  = document.createElementNS('http://www.w3.org/2000/svg','tspan'); tAvg.textContent = avgStr; text.appendChild(tAvg);
-
-    // 初始字級：依 header 面積估一個基準，再夾取
-    const k = 0.1; let f = Math.max(this.minFont, Math.floor(Math.sqrt(Math.max(1,w*h))*k)); f = Math.min(f, Math.floor(h*0.9));
-    text.setAttribute('font-size', f);
-    // 位置：靠左、垂直在 header 中線
-    text.setAttribute('text-anchor','start'); text.setAttribute('dominant-baseline','middle'); text.setAttribute('x', d.x0 + this.inset + 4); text.setAttribute('y', d.y0 + headerH/2);
-    // clip 到 header 區域
-    const clipUrl = this.ensureHeaderClip(svg, text.parentNode, d, headerH); text.setAttribute('clip-path', clipUrl);
-
-    // 量測寬高，若超出則縮小字級；字級到 minFont 後再對「名稱」逐字省略，平均值不被移除
-    let guard=0; const maxW=w; const maxH=h; // 單行
-    while(guard++<40){
-      const bb = text.getBBox();
-      const sW = maxW / Math.max(1, bb.width);
-      const sH = maxH / Math.max(1, bb.height);
-      const s = Math.min(sW, sH, 1);
-      const next = Math.max(this.minFont, Math.floor(f * s));
-      if (next < f){ f = next; text.setAttribute('font-size', f); continue; }
-      // 若已到 minFont 仍超寬 → 逐字省略名稱
-      if (sW < 1 && f <= this.minFont){
-        // 逐字縮短 tName，保留 tAvg
-        let nm = tName.textContent || '';
-        if (nm.length>0){ tName.textContent = nm.slice(0, -1) + '…'; continue; }
-      }
-      break;
-    }
-  }
+  minFont: 5,
+  lineHeight: 1.12,
+  inset: 3,
+  k: 0.12,
+  ensureHeaderClip(svg, gEl, d, headerH){ const id=gEl.dataset.headerClipId||('hclip-'+Math.random().toString(36).slice(2)); gEl.dataset.headerClipId=id; let defs=svg.querySelector('defs'); if(!defs) defs=svg.insertBefore(document.createElementNS('http://www.w3.org/2000/svg','defs'), svg.firstChild); let clip=svg.querySelector('#'+id); if(!clip){ clip=document.createElementNS('http://www.w3.org/2000/svg','clipPath'); clip.setAttribute('id',id); const r=document.createElementNS('http://www.w3.org/2000/svg','rect'); clip.appendChild(r); defs.appendChild(clip);} const r=clip.firstChild; const w=Math.max(0,d.x1-d.x0), h=Math.max(0,headerH); r.setAttribute('x', d.x0+this.inset); r.setAttribute('y', d.y0+this.inset); r.setAttribute('width', Math.max(0, w-this.inset*2)); r.setAttribute('height',Math.max(0, h-this.inset*2)); return `url(#${id})`; },
+  mountOneLine(text,d){ while(text.firstChild) text.removeChild(text.firstChild); const tName=document.createElementNS('http://www.w3.org/2000/svg','tspan'); tName.textContent=d.data.name||''; text.appendChild(tName); const tSep=document.createElementNS('http://www.w3.org/2000/svg','tspan'); tSep.textContent='  '; text.appendChild(tSep); const tAvg=document.createElementNS('http://www.w3.org/2000/svg','tspan'); tAvg.textContent=`平均：${displayPct(d.data.avg)}`; text.appendChild(tAvg); text.dataset.mode='one'; },
+  mountTwoLines(text,d){ while(text.firstChild) text.removeChild(text.firstChild); const tName=document.createElementNS('http://www.w3.org/2000/svg','tspan'); tName.textContent=d.data.name||''; text.appendChild(tName); const tAvg=document.createElementNS('http://www.w3.org/2000/svg','tspan'); tAvg.textContent=`平均：${displayPct(d.data.avg)}`; text.appendChild(tAvg); text.dataset.mode='two'; },
+  ellipsizeName(text,maxW){ const tName=text.querySelector('tspan'); if(!tName) return false; let nm=tName.textContent||''; if(nm.length===0) return false; tName.textContent=nm.slice(0,-1)+'…'; return true; },
+  fit(text, d, headerH){ const wMax=Math.max(0,d.x1-d.x0)-this.inset*2; const hMax=Math.max(0,headerH)-this.inset*2; if(wMax<=0||hMax<=0) return; text.setAttribute('text-anchor','start'); text.setAttribute('dominant-baseline','middle'); text.setAttribute('x', d.x0+this.inset+4); text.setAttribute('y', d.y0+headerH/2); text.setAttribute('clip-path', this.ensureHeaderClip(text.ownerSVGElement, text.parentNode, d, headerH)); this.mountOneLine(text,d); let f=Math.max(this.minFont, Math.floor(Math.min(Math.sqrt(Math.max(1,wMax*hMax))*this.k, hMax*0.95))); let guard=0; const loop=()=>{ if(++guard>140) return; text.setAttribute('font-size', f); const mode=text.dataset.mode||'one'; if(mode==='one'){ const bb=text.getBBox(); const sW=wMax/Math.max(1,bb.width), sH=hMax/Math.max(1,bb.height); const s=Math.min(sW,sH,1); const next=Math.max(this.minFont, Math.floor(f*s)); if(next<f){ f=next; return loop(); } if(sW<1 && f<=this.minFont){ if(!this.ellipsizeName(text,wMax)){ if(hMax>=this.minFont*2*this.lineHeight+2){ this.mountTwoLines(text,d); return loop(); } } return loop(); } return; } else { const tsp=text.querySelectorAll('tspan'); if(tsp.length<2) return; tsp[0].setAttribute('dy', `${-this.lineHeight/2}em`); tsp[1].setAttribute('dy', `${this.lineHeight}em`); tsp.forEach(t=>t.setAttribute('x', text.getAttribute('x'))); const bb=text.getBBox(); const sW=wMax/Math.max(1,bb.width), sH=hMax/Math.max(1,bb.height); const s=Math.min(sW,sH,1); const next=Math.max(this.minFont, Math.floor(f*s)); if(next<f){ f=next; return loop(); } if(sW<1 && f<=this.minFont){ if(this.ellipsizeName(text,wMax)) return loop(); } return; } }; loop(); }
 };
 
 function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode){
@@ -232,45 +214,57 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
     groups.get(rel).push({ code:codeVal, name:nameVal, raw:v });
   }
 
-  // 只留前 8 類（依個股數量）
-  const entries = Array.from(groups.entries()).sort((a,b)=> b[1].length - a[1].length).slice(0,8);
+  // 只留前 N 類（依個股數量）
+  const entries = Array.from(groups.entries()).sort((a,b)=> b[1].length - a[1].length).slice(0,GROUP_KEEP_MAX);
   const kept = new Map(entries);
 
   const hint=document.getElementById(hintId);
   if(kept.size===0){ hint.textContent='此區在選定月份沒有可用數據'; return; } else { hint.textContent=''; }
 
-  // ====== 葉節點 base 值（簽名平移）與 類股平均權重 ======
   const EPS = 0.01;
-  const allLeaves = []; const groupSummaries = [];
+  const groupSummaries = [];
   for (const [rel, list] of kept){
     const avg = d3.mean(list, d=>d.raw);
     const minLeafRaw = d3.min(list, d=>d.raw);
     const baseValues = list.map(s => ({ s, base: Math.max(EPS, (s.raw - minLeafRaw + EPS)) }));
     const baseSum = d3.sum(baseValues, d=>d.base) || EPS;
     groupSummaries.push({ rel, list, avg, baseValues, baseSum });
-    baseValues.forEach(x=>allLeaves.push(x.s));
   }
-  const minAvg = d3.min(groupSummaries, d=>d.avg);
 
-  // 構造 treemap 階層：每組的總面積 = 平移後的平均值；
-  // 組內每個葉節點 = 依 base 值按比例縮放，使 sum == groupWeight。
+  // === 群組面積權重 ===
+  let groupWeights = new Map();
+  if (GROUP_WEIGHT_MODE === 'AVG') {
+    // v3.8 原邏輯（簽名平移）：avg 大 → 面積比例大
+    const minAvg = d3.min(groupSummaries, d=>d.avg);
+    for (const g of groupSummaries){
+      groupWeights.set(g.rel, Math.max(EPS, (g.avg - minAvg + EPS)));
+    }
+  } else {
+    // RANK 模式：依 avg 排名，映射到 [RANK_WEIGHT_MIN, RANK_WEIGHT_MAX]
+    const sorted = [...groupSummaries].sort((a,b)=> a.avg - b.avg); // 小→大
+    const n = Math.max(1, sorted.length-1);
+    sorted.forEach((g, i)=>{
+      const t = i / n; // 0..1
+      const w = RANK_WEIGHT_MIN + t * (RANK_WEIGHT_MAX - RANK_WEIGHT_MIN);
+      groupWeights.set(g.rel, w);
+    });
+  }
+
+  // === 組裝 treemap 階層：每組合計 value = groupWeight；組內按 base 值等比縮放 ===
   const children=[];
   for (const g of groupSummaries){
-    const groupWeight = Math.max(EPS, (g.avg - minAvg + EPS));
-    const scale = groupWeight / (g.baseSum || EPS);
-    const kids = g.baseValues.map(({s, base})=>({
-      name: s.name||'', code:s.code, raw:s.raw, value: base * scale
-    }));
-    children.push({ name: g.rel, avg: g.avg, children: kids });
+    const gw = groupWeights.get(g.rel) || 1;
+    const scale = gw / (g.baseSum || EPS);
+    const kids = g.baseValues.map(({s, base})=>({ name:s.name||'', code:s.code, raw:s.raw, value: base * scale }));
+    children.push({ name:g.rel, avg:g.avg, children:kids });
   }
 
-  const HEADER_H = 22;
   const root=d3.hierarchy({ children }).sum(d=>d.value).sort((a,b)=>(b.value||0)-(a.value||0));
   d3.treemap().size([W,H]).paddingOuter(8).paddingInner(3).paddingTop(HEADER_H)(root);
 
   const g=svg.append('g');
 
-  // —— 類股群組底與框 ——
+  // —— 群組底與框 ——
   const parents=g.selectAll('g.parent').data(root.children||[]).enter().append('g').attr('class','parent');
   parents.append('rect').attr('class','group-bg')
     .attr('x',d=>d.x0).attr('y',d=>d.y0)
@@ -280,7 +274,7 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
     .attr('x',d=>d.x0).attr('y',d=>d.y0)
     .attr('width',d=>Math.max(0,d.x1-d.x0)).attr('height',d=>Math.max(0,d.y1-d.y0));
 
-  // —— 類股標題（靠左中、絕不溢出、平均值永不消失） ——
+  // —— 群組標題（靠左中，單/雙行自適應） ——
   const titles = parents.append('text')
     .attr('class','node-title')
     .attr('fill','#fff')
@@ -316,10 +310,13 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
   });
 
   requestAnimationFrame(()=>{
-    node.each(function(d){
-      const w = Math.max(0, d.x1 - d.x0); const h = Math.max(0, d.y1 - d.y0);
-      const textEl = this.querySelector('text'); if (!textEl) return;
-      LabelFit.fitBlock(textEl, w, h); LabelFit.ensureClip(this, w, h);
-    });
+    // 個股文字 fit + 裁切
+    node.each(function(d){ const w=Math.max(0,d.x1-d.x0), h=Math.max(0,d.y1-d.y0); const textEl=this.querySelector('text'); if(!textEl) return; LabelFit.fitBlock(textEl, w, h); LabelFit.ensureClip(this, w, h); });
+    // 標題 draw 後再 fit 一次（避免邊界 case）
+    parents.select('text').each(function(d){ GroupTitleFit.fit(this, d, HEADER_H); });
   });
+
+  // 視窗改變時重算標題字級
+  const onResize = ()=>{ parents.select('text').each(function(d){ GroupTitleFit.fit(this, d, HEADER_H); }); };
+  window.addEventListener('resize', onResize, { passive:true });
 }
