@@ -10,12 +10,12 @@
   </script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <style>
+    body { margin: 0; }
+    .controls { margin-top: 12px; }
+  </style>
 </head>
 <body>
-  <header class="page-header">
-    <h1>供應鏈月營收熱力圖（診斷版）</h1>
-    <p class="sub">網址可加 <code>?v=任意字串</code> 來強制讀取新版資料與腳本。右上角查詢與 Treemap 個股皆可點擊開啟 FBS。</p>
-  </header>
   <section class="controls">
     <div class="field">
       <label for="stockInput">股票代號 / 名稱</label>
@@ -36,6 +36,7 @@
     <div id="resultChip" class="result-chip" aria-live="polite"></div>
     <span id="status" class="status" style="margin-left:8px"></span>
   </section>
+
   <main class="layout">
     <section class="column" id="upstreamCol">
       <div class="section-head">
@@ -49,6 +50,7 @@
       <div class="treemap-wrap"><svg id="upTreemap"></svg></div>
       <div id="upHint" class="meta" style="margin-top:6px"></div>
     </section>
+
     <section class="column" id="downstreamCol">
       <div class="section-head">
         <h2>下游 Treemap（依關係類型）</h2>
@@ -62,9 +64,7 @@
       <div id="downHint" class="meta" style="margin-top:6px"></div>
     </section>
   </main>
-  <footer class="page-footer">
-    <p>請將 <code>data.xlsx</code> 與本檔同層。網址後加 <code>?v=20260204</code> 可強制取新檔。</p>
-  </footer>
+
   <script>
     document.write('<script src="app.js?v='+VER+'"><\/script>');
     document.write('<script src="stock-link-plugin.js?v='+VER+'"><\/script>');
