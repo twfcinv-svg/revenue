@@ -364,3 +364,12 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
   const onResize = ()=>{ parents.select('text').each(function(d){ GroupTitleFit.fit(this, d, HEADER_H); }); };
   window.addEventListener('resize', onResize, { passive:true });
 }
+
+
+// — 供應鏈心智圖：高亮所屬步驟
+if (window.updateSupplyChainByTicker) {
+  window.updateSupplyChainByTicker(codeKey);
+} else {
+  // 或事件模式
+  // window.dispatchEvent(new CustomEvent('stockSelected', { detail: { code: codeKey }}));
+}
