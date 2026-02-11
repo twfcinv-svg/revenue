@@ -7,7 +7,7 @@
  * 其他維持 v3.10（個股最小 3px、不外溢；類股面積 RANK 模式）。
  */
 
-const URL_VER = new URLSearchParams(location.search).get('v') || Date.now();
+const URL_VER = Date.now();
 const XLSX_FILE = new URL(`./data.xlsx?v=${URL_VER}`, location.href).toString();
 const REVENUE_SHEET = 'Revenue';
 const LINKS_SHEET   = 'Links';
@@ -367,6 +367,3 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
 
 
 if(window.updateSupplyChainByTicker){window.updateSupplyChainByTicker(codeKey);}
-
-// — 供應鏈心智圖：高亮所屬步驟
-if (window.updateSupplyChainByTicker) { window.updateSupplyChainByTicker(codeKey); }

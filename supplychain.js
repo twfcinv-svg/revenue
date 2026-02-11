@@ -1,12 +1,12 @@
 (function(){
-  const URL_VER = new URLSearchParams(location.search).get('v') || Date.now();
+  const URL_VER = Date.now(); // always force fresh fetch
   const XLSX_FILE = new URL(`./data.xlsx?v=${URL_VER}`, location.href).toString();
   const SHEET_NODES='ChainNodes', SHEET_LINKS='ChainLinks', SHEET_STOCKS='ChainStocks', SHEET_REVENUE='Revenue';
   const svg = d3.select('#sc-svg');
   const listEl = document.querySelector('#sc-stock-list');
   const listTitle = document.querySelector('#sc-list-title');
   const state = { inited:false, nodes:[], links:[], stocksByStage:new Map(), stockToStages:new Map(), revenueRows:[], colMap:{}, months:[], byCodeName:new Map(), sim:null, nodeSel:null, linkSel:null };
-  document.addEventListener('DOMContentLoaded', async()=>{ try{ const wb=await loadWorkbook(); buildData(wb); buildChart(); bindExternalControls(); state.inited=true; } catch(e){ console.error(e); svg.append('text').attr('x',20).attr('y',30).attr('fill','#e11d48').text('供應鏈資料載入失敗：'+e.message); } });
+  document.addEventListener('DOMContentLoaded', async()=>{ try{ const wb=await loadWorkbook(); buildData(wb); buildChart(); bindExternalControls(); state.inited=true; } catch(e){ console.error(e); if(svg.node()) svg.append('text').attr('x',20).attr('y',30).attr('fill','#e11d48').text('供應鏈資料載入失敗：'+e.message); } });
   async function loadWorkbook(){ const r=await fetch(XLSX_FILE,{cache:'no-store'}); if(!r.ok) throw new Error('讀取 data.xlsx 失敗（HTTP '+r.status+'）'); const buf=await r.arrayBuffer(); return XLSX.read(buf,{type:'array'}); }
   const COL_RE={ YoY:/^(\d{4})[\/年-]?\s*(\d{1,2})\s*單月合併營收\s*年[成增]長\s*[\(（]?(?:%|％)[\)）]?$/i, MoM:/^(\d{4})[\/年-]?\s*(\d{1,2})\s*單月合併營收\s*月[變增]動\s*[\(（]?(?:%|％)[\)）]?$/i };
   function toHalfWidth(s){ return String(s||'').replace(/[０-９Ａ-Ｚａ-ｚ]/g,ch=>String.fromCharCode(ch.charCodeAt(0)-0xFEE0)); }
