@@ -114,7 +114,11 @@ function handleRun(){
   const metric  = (document.querySelector('#metricSelect')?.value)||'MoM';
   const colorMode=(document.querySelector('#colorMode')?.value)||'redPositive';
 
-  if(!raw || !raw.trim()){ alert('請輸入股票代號或公司名稱'); return; }
+  if(!raw || !raw.trim()){ alert('請輸入股票代號或公司名稱'); return; 
+
+// — 供應鏈心智圖：高亮所屬步驟
+if (window.updateSupplyChainByTicker) { window.updateSupplyChainByTicker(codeKey); }
+}
 
   let codeKey = normCode(raw);
   let rowSelf = byCode.get(codeKey);
@@ -365,5 +369,3 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
   window.addEventListener('resize', onResize, { passive:true });
 }
 
-
-if(window.updateSupplyChainByTicker){window.updateSupplyChainByTicker(codeKey);}

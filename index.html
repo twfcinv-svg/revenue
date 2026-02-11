@@ -76,12 +76,41 @@
       <div id="downHint" class="meta" style="margin-top:6px"></div>
     </section>
   
-<section id="supplychain" class="column" style="margin: 0 16px 48px;">
-  <div class="section-head"><h2>半導體產業供應鏈（互動心智圖）</h2></div>
-  <div id="supplychain-vis" style="width:100%;max-width:1100px;margin:auto;"></div>
-  <div id="supplychain-stock-list" class="meta" style="margin-top:10px;">🔍 點擊節點查看該步驟的個股…</div>
+
+<!-- === 產業供應鏈（流程＋可點節點） === -->
+<section id="sc-section" style="margin: 24px 16px 48px;">
+  <h2 style="margin:0 0 12px;">產業鏈流程 & 概念股（互動）</h2>
+  <div id="sc-grid">
+    <aside id="sc-left">
+      <div id="sc-list-title">📌 請先點右方節點（例如：IC封裝）</div>
+      <ul id="sc-stock-list"></ul>
+    </aside>
+    <div id="sc-right">
+      <svg id="sc-svg" viewBox="0 0 1000 620" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+  </div>
 </section>
-<script>document.write('<script src="supplychain.js?v='+VER+'"><\/script>');</script>
+<style>
+  #sc-grid{ display:grid; grid-template-columns: 360px 1fr; gap:16px; }
+  @media (max-width: 900px){ #sc-grid{ grid-template-columns: 1fr; } }
+  #sc-left{ background:rgba(15,23,42,.4); border:1px solid rgba(255,255,255,.08); border-radius:8px; padding:12px; min-height: 200px; color:#e5e7eb; }
+  #sc-list-title{ font-weight:700; margin-bottom:8px; }
+  #sc-stock-list{ list-style:none; margin:0; padding:0;}
+  #sc-stock-list li{ padding:8px 6px; border-bottom:1px dashed rgba(255,255,255,.12); display:flex; align-items:center; gap:8px;}
+  #sc-stock-list .code{ font-weight:700; color:#fff; min-width:56px; }
+  #sc-stock-list .chip{ font-size:12px; padding:2px 6px; border-radius:999px; background:rgba(255,255,255,.12)}
+  #sc-stock-list li button{ margin-left:auto; padding:4px 8px; font-size:12px; border:1px solid rgba(255,255,255,.18); background:transparent; color:#e5e7eb; border-radius:6px; cursor:pointer; }
+  #sc-right{ background:rgba(15,23,42,.4); border:1px solid rgba(255,255,255,.08); border-radius:8px; padding:10px; }
+  .sc-link{ stroke:#bdbdbd; stroke-width:1.5px; marker-end:url(#sc-arrow); }
+  .sc-node circle{ fill:#ff8a8a; stroke:#cc6666; stroke-width:1.5px; cursor:pointer; }
+  .sc-node text{ fill:#e5e7eb; font-size:13px; pointer-events:none; }
+  .sc-node.highlight circle{ fill:#e74c3c; stroke:#b60e0e; stroke-width:3px; }
+</style>
+<script>
+  (function(){ var VER = new URLSearchParams(location.search).get('v')||Date.now();
+    document.write('<script src="supplychain.js?v='+VER+'">\x3C/script>');
+  })();
+</script>
 
 </main>
 
