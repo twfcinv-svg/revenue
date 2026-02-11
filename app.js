@@ -367,3 +367,6 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
 
 
 if(window.updateSupplyChainByTicker){window.updateSupplyChainByTicker(codeKey);}
+
+// — 供應鏈心智圖：高亮所屬步驟
+if (window.updateSupplyChainByTicker) { window.updateSupplyChainByTicker(codeKey); }
