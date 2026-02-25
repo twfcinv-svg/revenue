@@ -1,4 +1,12 @@
-/* app.js — v3.11 + rev-combo chart (for (千) revenue columns) */
+/* app.js — v3.11
+ * Patch: 強化群組標題在極窄情況（特別是右下角）仍不會被裁掉：
+ *  - header clipPath 使用 userSpaceOnUse；
+ *  - 單行→兩行、名稱逐字省略、最小 5px；
+ *  - 最後保險：若仍超寬，將「平均：xx%」改為僅顯示數值（xx%），仍確保平均值不消失；
+ *  - 若還是超寬，使用 textLength + lengthAdjust=spacingAndGlyphs 壓縮到可視寬度內；
+ * 其他維持 v3.10（個股最小 3px、不外溢；類股面積 RANK 模式）。
+ */
+
 const URL_VER = Date.now();
 const XLSX_FILE = new URL(`./data.xlsx?v=${URL_VER}`, location.href).toString();
 const REVENUE_SHEET = 'Revenue';
@@ -61,9 +69,6 @@ async function loadWorkbook(){
     if(m){ const ym=m[1]+String(m[2]).padStart(2,'0'); (COL_MAP[ym]??=({})).YoY = rawHeader; found.add(ym); continue; }
     m = h.match(/^(\d{4})[\/年-]?\s*(\d{1,2})\s*單月合併營收\s*月[變增]動\s*[\(（]?\s*(?:%|％)\s*[\)）]?$/);
     if(m){ const ym=m[1]+String(m[2]).padStart(2,'0'); (COL_MAP[ym]??=({})).MoM = rawHeader; found.add(ym); continue; }
-    // 解析「單月合併營收(千/仟/元)」欄（你目前的檔為「(千)」）
-    m = h.match(/^(\d{4})\s*[\/年-]?\s*(\d{1,2})\s*(?:月)?\s*(?:單月)?合併營收\s*[\(（]?\s*(千|仟|元)\s*[\)）]?$/);
-    if(m){ const ym=m[1]+String(m[2]).padStart(2,'0'); (COL_MAP[ym]??=({})).Rev = rawHeader; found.add(ym); continue; }
   }
   months = Array.from(found).sort((a,b)=>b.localeCompare(a));
 
@@ -103,26 +108,16 @@ function getMetricValue(row, month, metric){
   return Number.isFinite(v) ? v : null;
 }
 
-function getRevenueValue(row, month){
-  if(!row || !month) return null;
-  const col = (COL_MAP[month] || {}).Rev;
-  if(!col) return null; let v = row[col]; if(v==null || v==='') return null;
-  let mul = 1;
-  // 若表頭帶 (千) 或 (仟)，將數值轉為「元」
-  if (typeof col === 'string' && /(\(|（)\s*(千|仟)\s*(\)|）)/.test(col)) mul = 1000;
-  if (typeof v === 'string') { v = v.replace(/[ ,，]/g,'').replace(/[^\d\.\-]/g,'').trim(); }
-  v = Number(v) * mul; return Number.isFinite(v) ? v : null;
-}
-
-function fmtYM(ym){ return `${ym.slice(0,4)}/${ym.slice(4,6)}`; }
-function formatAmount(v){ if(v==null||!isFinite(v)) return '—'; const a=Math.abs(v); if(a>=1e12) return (v/1e12).toFixed(1)+'兆'; if(a>=1e8) return (v/1e8).toFixed(1)+'億'; if(a>=1e6) return (v/1e6).toFixed(1)+'M'; if(a>=1e3) return (v/1e3).toFixed(1)+'K'; return String(Math.round(v)); }
-
 function handleRun(){
   const raw     = document.querySelector('#stockInput').value;
   const month   = (document.querySelector('#monthSelect')?.value)||'';
   const metric  = (document.querySelector('#metricSelect')?.value)||'MoM';
   const colorMode=(document.querySelector('#colorMode')?.value)||'redPositive';
-  if(!raw || !raw.trim()){ alert('請輸入股票代號或公司名稱'); return; }
+
+  if(!raw || !raw.trim()){ alert('請輸入股票代號或公司名稱'); return; 
+  // — 供應鏈心智圖：高亮所屬步驟
+  if (window.updateSupplyChainByTicker) { console.log('[sc] highlight for', codeKey); window.updateSupplyChainByTicker(codeKey); }
+}
 
   let codeKey = normCode(raw);
   let rowSelf = byCode.get(codeKey);
@@ -145,7 +140,7 @@ function handleRun(){
     const nameLabel = (rowSelf['名稱'] || rowSelf['公司名稱'] || rowSelf['證券名稱'] || '').trim();
     const extra = `${month.slice(0,4)}/${month.slice(4,6)} · ${metric}`;
     if (window.setResultChipLink) window.setResultChipLink(codeLabel, nameLabel, extra);
-  }catch(_){}
+  }catch(_){ }
 
   const upstreamEdges   = linksByDown.get(codeKey) || [];
   const downstreamEdges = linksByUp.get(codeKey)   || [];
@@ -156,10 +151,7 @@ function handleRun(){
   });
   requestAnimationFrame(()=>{
     renderTreemap('downTreemap','downHint',downstreamEdges,'下游代號', month, metric, colorMode);
-    renderRevComboChart(rowSelf); // 新增：組合圖
   });
-
-  if (window.updateSupplyChainByTicker) { window.updateSupplyChainByTicker(codeKey); }
 }
 
 function renderResultChip(selfRow, month, metric, colorMode){
@@ -188,7 +180,7 @@ const LabelFit = {
   fitBlock(textEl,w,h){ const p=this.dynPadding(w,h); const targetW=Math.max(1,w-p*2), targetH=Math.max(1,h-p*2); const code=textEl.dataset.code||''; const name=textEl.dataset.name||''; const pct=textEl.dataset.pct||''; const layouts=[ ()=>[`${code}${name?(' '+name):''}`, pct], ()=>[code, pct], ()=>[pct] ]; const k=0.12; const areaFont=Math.sqrt(targetW*targetH)*k; const logicalMax=Math.min(this.maxFont, Math.floor(targetH*0.5)); for(const L of layouts){ while(textEl.firstChild) textEl.removeChild(textEl.firstChild); L().forEach(s=>{ const t=document.createElementNS('http://www.w3.org/2000/svg','tspan'); t.textContent=s; textEl.appendChild(t); }); let f=Math.max(this.minFontHard, Math.min(logicalMax, Math.floor(areaFont))); textEl.setAttribute('font-size',f); this.centerText(textEl,w,h,p); this.ellipsizeNameToWidth(textEl, targetW); let guard=0; while(guard++<60){ const bb=textEl.getBBox(); const sW=targetW/Math.max(1,bb.width), sH=targetH/Math.max(1,bb.height); const s=Math.min(sW,sH,1); const next=Math.max(this.minFontHard, Math.floor(f*s)); if(next<f){ f=next; textEl.setAttribute('font-size',f); this.centerText(textEl,w,h,p); continue; } if(sW<1 && f<=this.minFontHard){ this.ellipsizeNameToWidth(textEl, targetW); } break; } const tsp=textEl.querySelectorAll('tspan'); const n=Math.max(1,tsp.length); const offsetEm=-((n-1)*this.lineHeight/2); tsp.forEach((t,i)=>{ t.setAttribute('x', textEl.getAttribute('x')); t.setAttribute('dy', i===0?`${offsetEm}em`:`${this.lineHeight}em`); }); const box=textEl.getBBox(); if(box.width<=targetW+0.1 && box.height<=targetH+0.1){ textEl.removeAttribute('display'); return; } } textEl.setAttribute('display','none'); }
 };
 
-// ========= 群組標題（增強） =========
+// ========= 群組標題（增強：最終保險數值縮短 + textLength 壓縮） =========
 const GroupTitleFit = {
   minFont: 5,
   lineHeight: 1.12,
@@ -198,9 +190,15 @@ const GroupTitleFit = {
   mountOneLine(text,d){ while(text.firstChild) text.removeChild(text.firstChild); const tName=document.createElementNS('http://www.w3.org/2000/svg','tspan'); tName.textContent=d.data.name||''; const tSep=document.createElementNS('http://www.w3.org/2000/svg','tspan'); tSep.textContent='  '; const tAvg=document.createElementNS('http://www.w3.org/2000/svg','tspan'); tAvg.textContent=`平均：${displayPct(d.data.avg)}`; text.appendChild(tName); text.appendChild(tSep); text.appendChild(tAvg); text.dataset.mode='one'; },
   mountTwoLines(text,d){ while(text.firstChild) text.removeChild(text.firstChild); const tName=document.createElementNS('http://www.w3.org/2000/svg','tspan'); tName.textContent=d.data.name||''; const tAvg=document.createElementNS('http://www.w3.org/2000/svg','tspan'); tAvg.textContent=`平均：${displayPct(d.data.avg)}`; text.appendChild(tName); text.appendChild(tAvg); text.dataset.mode='two'; },
   ellipsizeName(text,maxW){ const tName=text.querySelector('tspan'); if(!tName) return false; let nm=tName.textContent||''; if(nm.length===0) return false; tName.textContent=nm.slice(0,-1)+'…'; return true; },
-  shortenAvg(text){ const tsp = text.querySelectorAll('tspan'); if (tsp.length===0) return; const last = tsp[tsp.length-1]; const m = String(last.textContent||'').match(/([+\-]?[0-9]+(?:\.[0-9])?%)/); if (m) last.textContent = m[1]; },
+  shortenAvg(text){ // 把「平均：+12.3%」縮成「+12.3%」
+    const tsp = text.querySelectorAll('tspan');
+    if (tsp.length===0) return; // 單行時平均在第3個；兩行時在第2個
+    const last = tsp[tsp.length-1];
+    const m = String(last.textContent||'').match(/([+\-]?[0-9]+(?:\.[0-9])?%)/);
+    if (m) last.textContent = m[1];
+  },
   fit(text, d, headerH){
-    const wMaxFull = Math.max(0, d.x1-d.x0) - this.inset*2 - 2;
+    const wMaxFull = Math.max(0, d.x1-d.x0) - this.inset*2 - 2; // 再扣 2px 邊框
     const hMax = Math.max(0, headerH)  - this.inset*2 - 1;
     if (wMaxFull<=0 || hMax<=0) return;
 
@@ -234,17 +232,21 @@ const GroupTitleFit = {
           if (this.ellipsizeName(text, wMaxFull)) return loop();
         }
       }
+      // 成功或達到最小
       return;
     };
 
     loop();
 
+    // Final clamp #1：若仍超寬，先把「平均：」縮成純數值
     let bb = text.getBBox();
     if (bb.width > wMaxFull + 0.1) {
       this.shortenAvg(text);
       text.setAttribute('font-size', Math.max(this.minFont, parseInt(text.getAttribute('font-size')||this.minFont) - 1));
       bb = text.getBBox();
     }
+
+    // Final clamp #2：若仍超寬，使用 textLength 強制壓進寬度（只限 header 內部，視覺影響有限）
     if (bb.width > wMaxFull + 0.1) {
       text.setAttribute('lengthAdjust','spacingAndGlyphs');
       text.setAttribute('textLength', Math.max(1, Math.floor(wMaxFull)));
@@ -287,6 +289,7 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
     groupSummaries.push({ rel, list, avg, baseValues, baseSum });
   }
 
+  // 群組面積權重：RANK 柔性強調 或 AVG 等比
   let groupWeights = new Map();
   if (GROUP_WEIGHT_MODE === 'AVG') {
     const minAvg = d3.min(groupSummaries, d=>d.avg);
@@ -365,109 +368,5 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
   window.addEventListener('resize', onResize, { passive:true });
 }
 
-// ========= 合併營收 + 月增 / 年增 組合圖 =========
-function renderRevComboChart(selfRow){
-  const hint = document.getElementById('revComboHint');
-  const svg  = d3.select('#revComboSvg');
-  svg.selectAll('*').remove();
 
-  const seq = months.slice().sort((a,b)=>a.localeCompare(b));
-  const data = seq.map(ym => ({
-      ym,
-      rev: getRevenueValue(selfRow, ym),
-      mom: getMetricValue(selfRow, ym, 'MoM'),
-      yoy: getMetricValue(selfRow, ym, 'YoY')
-  })).filter(d => d.rev!=null || d.mom!=null || d.yoy!=null);
-
-  if (data.length === 0){
-    hint.textContent = '沒有可繪製的合併營收 / 月增 / 年增資料。請確認 Revenue 表是否包含「YYYYMM單月合併營收(千)」欄位。';
-    return;
-  } else { hint.textContent = ''; }
-
-  const wrap = document.getElementById('revComboWrap');
-  const W = Math.max(320, wrap.clientWidth);
-  const H = Math.max(180, parseInt(getComputedStyle(wrap).height) || 320);
-
-  const margin = { top: 10, right: 56, bottom: 26, left: 42 };
-  const innerW = Math.max(1, W - margin.left - margin.right);
-  const innerH = Math.max(1, H - margin.top - margin.bottom);
-
-  svg.attr('width', W).attr('height', H);
-  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
-
-  const x = d3.scaleBand().domain(data.map(d=>d.ym)).range([0, innerW]).paddingInner(0.15).paddingOuter(0.05);
-
-  const pctVals = data.flatMap(d => [d.mom, d.yoy]).filter(v => v!=null && isFinite(v));
-  const pad = 4;
-  const pctMin = (pctVals.length? d3.min(pctVals) : -10) - pad;
-  const pctMax = (pctVals.length? d3.max(pctVals) :  10) + pad;
-  const yLeft = d3.scaleLinear().domain([pctMin, pctMax]).range([innerH, 0]).nice();
-
-  const revVals = data.map(d=>d.rev).filter(v => v!=null && isFinite(v));
-  const yRight = d3.scaleLinear().domain([0, (revVals.length? d3.max(revVals) : 0) * 1.08 + 1]).range([innerH, 0]).nice();
-
-  g.append('g').attr('class','grid')
-    .call(d3.axisLeft(yLeft).ticks(5).tickSize(-innerW).tickFormat(''))
-    .selectAll('line').attr('opacity', 0.5);
-
-  g.selectAll('.bar').data(data).enter().append('rect')
-    .attr('class','bar')
-    .attr('x', d => x(d.ym))
-    .attr('y', d => yRight(d.rev ?? 0))
-    .attr('width', Math.max(1, x.bandwidth()))
-    .attr('height', d => innerH - yRight(d.rev ?? 0))
-    .attr('fill', '#3b82f6');
-
-  const lineGen = d3.line()
-    .defined(d => d!=null && isFinite(d[1]))
-    .x((d) => x(d[0]) + x.bandwidth()/2)
-    .y((d) => yLeft(d[1]));
-
-  g.append('path').attr('class','line')
-    .attr('stroke','#f59e0b').attr('stroke-width',2)
-    .attr('d', lineGen(data.map(d => [d.ym, d.yoy])));
-
-  g.append('path').attr('class','line')
-    .attr('stroke','#06b6d4').attr('stroke-width',2)
-    .attr('d', lineGen(data.map(d => [d.ym, d.mom])));
-
-  const xAxis = d3.axisBottom(x)
-    .tickValues(x.domain().filter((_,i) => data.length>36 ? i%3===0 : i%2===0))
-    .tickFormat(ym => fmtYM(ym));
-
-  g.append('g').attr('class','axis')
-    .attr('transform', `translate(0,${innerH})`).call(xAxis);
-
-  g.append('g').attr('class','axis').call(d3.axisLeft(yLeft).ticks(6).tickFormat(v => v.toFixed(0)+'%'));
-
-  g.append('g').attr('class','axis')
-    .attr('transform', `translate(${innerW},0)`)
-    .call(d3.axisRight(yRight).ticks(6).tickFormat(formatAmount));
-
-  const tip = d3.select('#revComboWrap').append('div')
-    .style('position','absolute').style('pointer-events','none')
-    .style('font-size','12px').style('background','rgba(15,23,42,.9)')
-    .style('color','#fff').style('padding','6px 8px')
-    .style('border-radius','6px').style('opacity',0);
-
-  const hoverRect = g.append('rect').attr('fill','transparent').attr('width',innerW).attr('height',innerH);
-
-  hoverRect.on('mousemove', function(event){
-    const [mx] = d3.pointer(event, this);
-    const idx = Math.max(0, Math.min(data.length-1, Math.round((mx - x.step()/2)/x.step())));
-    const d = data[idx];
-    if(!d) return;
-    const html = `
-      <div style="font-weight:600; margin-bottom:4px;">${fmtYM(d.ym)}</div>
-      <div>合併營收：<b>${formatAmount(d.rev)}</b></div>
-      <div>月增率 MoM：<b>${displayPct(d.mom)}</b></div>
-      <div>年增率 YoY：<b>${displayPct(d.yoy)}</b></div>
-    `;
-    tip.html(html).style('left', (d3.pointer(event, this)[0] + margin.left + 8)+'px')
-       .style('top',  (d3.pointer(event, this)[1] + margin.top  + 8)+'px')
-       .style('opacity',1);
-  }).on('mouseleave', ()=> tip.style('opacity',0));
-
-  const onResize = () => { renderRevComboChart(selfRow); };
-  window.addEventListener('resize', onResize, { passive:true });
-}
+if(window.updateSupplyChainByTicker){window.updateSupplyChainByTicker(codeKey);}
