@@ -13,18 +13,11 @@
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
   <style>
     body { margin: 0; }
-    .page-title { 
-      margin: 16px 16px 8px; 
-      font-weight: 700; 
-      /* 大於 h2（通常 24px），這裡設 30px */
-      font-size: 30px; 
-      line-height: 1.25; 
-      color: #fff;
-    }
+    .page-title { margin: 16px 16px 8px; font-weight: 700; font-size: 30px; line-height: 1.25; color: #fff; }
     .controls { margin: 8px 16px 12px; }
     .layout { margin: 0 16px 24px; }
 
-    /* ==== 組合圖（營收長條＋MoM/YoY雙折線）新增樣式 ==== */
+    /* 組合圖新增樣式 */
     .chart-section { margin: 8px 0 24px; }
     .chart-wrap { background: rgba(15,23,42,.35); border: 1px solid rgba(255,255,255,.08); border-radius: 8px; padding: 8px 8px 2px; }
     #comboChart { width: 100%; height: 380px; display: block; }
@@ -34,8 +27,7 @@
     .y.axis-left text { fill: #eab308; }
     .y.axis-right text { fill: #9be2ff; }
 
-    .bar-pos { fill: #e74c3c; opacity: .9; }
-    .bar-neg { fill: #2ecc71; opacity: .9; }
+    .bar-fixed { fill: #e74c3c; opacity: .9; }
     .line-mom { fill: none; stroke: #f4d03f; stroke-width: 2px; }
     .line-yoy { fill: none; stroke: #00d8d6; stroke-width: 2px; }
     .zero-line { stroke: rgba(255,255,255,.25); stroke-dasharray: 4 4; }
@@ -43,12 +35,9 @@
     .legend-row .chip { display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:2px 8px; border-radius:999px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); }
     .chip .swatch { width:12px; height:12px; border-radius:2px; display:inline-block; }
     .meta { color: #cbd5e1; font-size: 12px; }
-
-    .tooltip { position: fixed; pointer-events: none; background: rgba(0,0,0,.75); color:#fff; padding:6px 8px; border-radius:6px; font-size:12px; border:1px solid rgba(255,255,255,.15); transform: translate(-50%, calc(-100% - 8px)); z-index: 1000; white-space: nowrap; }
   </style>
 </head>
 <body>
-  <!-- 新增的頁面大標題，位於輸入個股欄位上方 -->
   <h1 class="page-title">營收互動儀錶板</h1>
 
   <section class="controls">
@@ -99,21 +88,21 @@
       <div id="downHint" class="meta" style="margin-top:6px"></div>
     </section>
 
-    <!-- === 新增：個股營收（柱）＋ 月增率 / 年增率（折線） === -->
+    <!-- 新增：營收走勢（組合圖） -->
     <section class="chart-section" id="combo-section">
       <div class="section-head">
-        <h2>個股：合併營收（長條）＋ 月增率 / 年增率（折線）</h2>
+        <h2>營收走勢</h2>
         <div class="legend-row">
-          <span class="chip"><i class="swatch" style="background:#e74c3c"></i> 柱＝營收（YoY≧0 紅色）</span>
-          <span class="chip"><i class="swatch" style="background:#2ecc71"></i> 柱＝營收（YoY＜0 綠色）</span>
-          <span class="chip"><i class="swatch" style="background:#f4d03f"></i> 折線＝月增率 MoM</span>
-          <span class="chip"><i class="swatch" style="background:#00d8d6"></i> 折線＝年增率 YoY</span>
+          <span class="chip"><i class="swatch" style="background:#e74c3c"></i> 合併營收</span>
+          <span class="chip"><i class="swatch" style="background:#f4d03f"></i> 月增率 (MoM)</span>
+          <span class="chip"><i class="swatch" style="background:#00d8d6"></i> 年增率 (YoY)</span>
         </div>
       </div>
       <div class="chart-wrap">
         <svg id="comboChart"></svg>
       </div>
-      <div id="comboHint" class="meta" style="margin-top:6px"></div>
+      <!-- 依需求：移除底部白字，改為不顯示 -->
+      <div id="comboHint" class="meta" style="display:none"></div>
     </section>
 
   </main>
