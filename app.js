@@ -1,4 +1,4 @@
-/* app.js — v3.11 + rev-combo chart */
+/* app.js — v3.11 + rev-combo chart (for (千) revenue columns) */
 const URL_VER = Date.now();
 const XLSX_FILE = new URL(`./data.xlsx?v=${URL_VER}`, location.href).toString();
 const REVENUE_SHEET = 'Revenue';
@@ -61,8 +61,8 @@ async function loadWorkbook(){
     if(m){ const ym=m[1]+String(m[2]).padStart(2,'0'); (COL_MAP[ym]??=({})).YoY = rawHeader; found.add(ym); continue; }
     m = h.match(/^(\d{4})[\/年-]?\s*(\d{1,2})\s*單月合併營收\s*月[變增]動\s*[\(（]?\s*(?:%|％)\s*[\)）]?$/);
     if(m){ const ym=m[1]+String(m[2]).padStart(2,'0'); (COL_MAP[ym]??=({})).MoM = rawHeader; found.add(ym); continue; }
-    // 解析「單月合併營收(千/仟元/元)」欄（若有）
-    m = h.match(/^(\d{4})\s*[\/年-]?\s*(\d{1,2})\s*(?:月)?\s*(?:單月)?合併營收\s*[\(（]?\s*(?:千|仟)?元?\s*[\)）]?$/);
+    // 解析「單月合併營收(千/仟/元)」欄（你目前的檔為「(千)」）
+    m = h.match(/^(\d{4})\s*[\/年-]?\s*(\d{1,2})\s*(?:月)?\s*(?:單月)?合併營收\s*[\(（]?\s*(千|仟|元)\s*[\)）]?$/);
     if(m){ const ym=m[1]+String(m[2]).padStart(2,'0'); (COL_MAP[ym]??=({})).Rev = rawHeader; found.add(ym); continue; }
   }
   months = Array.from(found).sort((a,b)=>b.localeCompare(a));
@@ -107,12 +107,15 @@ function getRevenueValue(row, month){
   if(!row || !month) return null;
   const col = (COL_MAP[month] || {}).Rev;
   if(!col) return null; let v = row[col]; if(v==null || v==='') return null;
+  let mul = 1;
+  // 若表頭帶 (千) 或 (仟)，將數值轉為「元」
+  if (typeof col === 'string' && /(\(|（)\s*(千|仟)\s*(\)|）)/.test(col)) mul = 1000;
   if (typeof v === 'string') { v = v.replace(/[ ,，]/g,'').replace(/[^\d\.\-]/g,'').trim(); }
-  v = Number(v); return Number.isFinite(v) ? v : null;
+  v = Number(v) * mul; return Number.isFinite(v) ? v : null;
 }
 
 function fmtYM(ym){ return `${ym.slice(0,4)}/${ym.slice(4,6)}`; }
-function formatAmount(v){ if(v==null||!isFinite(v)) return '—'; const a=Math.abs(v); if(a>=1e8) return (v/1e8).toFixed(1)+'億'; if(a>=1e6) return (v/1e6).toFixed(1)+'M'; if(a>=1e3) return (v/1e3).toFixed(1)+'K'; return String(Math.round(v)); }
+function formatAmount(v){ if(v==null||!isFinite(v)) return '—'; const a=Math.abs(v); if(a>=1e12) return (v/1e12).toFixed(1)+'兆'; if(a>=1e8) return (v/1e8).toFixed(1)+'億'; if(a>=1e6) return (v/1e6).toFixed(1)+'M'; if(a>=1e3) return (v/1e3).toFixed(1)+'K'; return String(Math.round(v)); }
 
 function handleRun(){
   const raw     = document.querySelector('#stockInput').value;
@@ -377,7 +380,7 @@ function renderRevComboChart(selfRow){
   })).filter(d => d.rev!=null || d.mom!=null || d.yoy!=null);
 
   if (data.length === 0){
-    hint.textContent = '沒有可繪製的合併營收 / 月增 / 年增資料。若你已在 Revenue 表新增「合併營收(千/仟元)」欄，請確認表頭格式與檔案已成功發布。';
+    hint.textContent = '沒有可繪製的合併營收 / 月增 / 年增資料。請確認 Revenue 表是否包含「YYYYMM單月合併營收(千)」欄位。';
     return;
   } else { hint.textContent = ''; }
 
@@ -395,13 +398,13 @@ function renderRevComboChart(selfRow){
   const x = d3.scaleBand().domain(data.map(d=>d.ym)).range([0, innerW]).paddingInner(0.15).paddingOuter(0.05);
 
   const pctVals = data.flatMap(d => [d.mom, d.yoy]).filter(v => v!=null && isFinite(v));
-  const pctMin = (pctVals.length? d3.min(pctVals) : -10) - 4;
-  const pctMax = (pctVals.length? d3.max(pctVals) :  10) + 4;
+  const pad = 4;
+  const pctMin = (pctVals.length? d3.min(pctVals) : -10) - pad;
+  const pctMax = (pctVals.length? d3.max(pctVals) :  10) + pad;
   const yLeft = d3.scaleLinear().domain([pctMin, pctMax]).range([innerH, 0]).nice();
 
   const revVals = data.map(d=>d.rev).filter(v => v!=null && isFinite(v));
-  const revMax = (revVals.length? d3.max(revVals) : 0) * 1.08 + 1;
-  const yRight = d3.scaleLinear().domain([0, revMax]).range([innerH, 0]).nice();
+  const yRight = d3.scaleLinear().domain([0, (revVals.length? d3.max(revVals) : 0) * 1.08 + 1]).range([innerH, 0]).nice();
 
   g.append('g').attr('class','grid')
     .call(d3.axisLeft(yLeft).ticks(5).tickSize(-innerW).tickFormat(''))
@@ -420,16 +423,13 @@ function renderRevComboChart(selfRow){
     .x((d) => x(d[0]) + x.bandwidth()/2)
     .y((d) => yLeft(d[1]));
 
-  const yoyPairs = data.map(d => [d.ym, d.yoy]);
-  const momPairs = data.map(d => [d.ym, d.mom]);
-
   g.append('path').attr('class','line')
     .attr('stroke','#f59e0b').attr('stroke-width',2)
-    .attr('d', lineGen(yoyPairs));
+    .attr('d', lineGen(data.map(d => [d.ym, d.yoy])));
 
   g.append('path').attr('class','line')
     .attr('stroke','#06b6d4').attr('stroke-width',2)
-    .attr('d', lineGen(momPairs));
+    .attr('d', lineGen(data.map(d => [d.ym, d.mom])));
 
   const xAxis = d3.axisBottom(x)
     .tickValues(x.domain().filter((_,i) => data.length>36 ? i%3===0 : i%2===0))
