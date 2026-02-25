@@ -1,123 +1,77 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>營收互動儀錶板｜供應鏈月營收熱力圖（診斷版）</title>
-  <script>
-    const VER = new URLSearchParams(location.search).get('v') || Date.now();
-    document.write('<link rel="stylesheet" href="styles.css?v='+VER+'">');
-  </script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
-  <style>
-    body { margin: 0; }
-    .page-title { 
-      margin: 16px 16px 8px; 
-      font-weight: 700; 
-      /* 大於 h2（通常 24px），這裡設 30px */
-      font-size: 30px; 
-      line-height: 1.25; 
-      color: #fff;
-    }
-    .controls { margin: 8px 16px 12px; }
-    .layout { margin: 0 16px 24px; }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>供應鏈樹圖＋合併營收組合圖</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <!-- 新增的頁面大標題，位於輸入個股欄位上方 -->
-  <h1 class="page-title">營收互動儀錶板</h1>
+  <header class="topbar">
+    <div class="wrap">
+      <div class="left">
+        <strong>供應鏈視覺化</strong>
+      </div>
+      <div class="right controls">
+        <input id="stockInput" type="text" placeholder="輸入股票代號或公司名稱（例如：2330 或 台積電）" />
+        <select id="monthSelect"></select>
+        <select id="metricSelect">
+          <option value="MoM">MoM</option>
+          <option value="YoY">YoY</option>
+        </select>
+        <select id="colorMode">
+          <option value="redPositive">紅漲綠跌</option>
+          <option value="greenPositive">綠漲紅跌</option>
+        </select>
+        <button id="runBtn">查詢</button>
+      </div>
+    </div>
+  </header>
 
-  <section class="controls">
-    <div class="field">
-      <label for="stockInput">股票代號 / 名稱</label>
-      <input id="stockInput" type="text" placeholder="例如：2330 或 台積電" />
-    </div>
-    <div class="field">
-      <label for="monthSelect">月份</label>
-      <select id="monthSelect"></select>
-    </div>
-    <div class="field">
-      <label for="metricSelect">指標</label>
-      <select id="metricSelect">
-        <option value="YoY">年成長 (YoY)</option>
-        <option value="MoM">月變動 (MoM)</option>
-      </select>
-    </div>
-    <button id="runBtn" class="primary">查詢</button>
-    <div id="resultChip" class="result-chip" aria-live="polite"></div>
-    <span id="status" class="status" style="margin-left:8px"></span>
-  </section>
+  <main class="wrap">
+    <section id="resultChip"></section>
 
-  <main class="layout">
-    <section class="column" id="upstreamCol">
-      <div class="section-head">
-        <h2>上游產業</h2>
-        <div class="legend">
-          <span class="chip pos-chip">表現佳</span>
-          <span class="chip neu-chip">中性</span>
-          <span class="chip neg-chip">表現弱</span>
+    <div class="grid2">
+      <section>
+        <h3 class="sec-title">上游</h3>
+        <div class="chart-wrap"><svg id="upTreemap" style="width:100%;height:560px"></svg></div>
+        <div id="upHint" class="hint"></div>
+      </section>
+      <section>
+        <h3 class="sec-title">下游</h3>
+        <div class="chart-wrap"><svg id="downTreemap" style="width:100%;height:560px"></svg></div>
+        <div id="downHint" class="hint"></div>
+      </section>
+    </div>
+
+    <!-- 合併營收 + 月增/年增 組合圖 -->
+    <section id="revComboSection" style="margin-top:12px;">
+      <div style="display:flex; align-items:center; gap:12px; margin: 6px 8px;">
+        <h3 style="margin:0; font-size:14px; color:#0f172a;">合併營收（柱）＋ 月增 / 年增（線）</h3>
+        <div id="revComboLegend" style="font-size:12px; color:#334155;">
+          <span style="display:inline-flex;align-items:center;margin-right:10px;">
+            <i style="width:10px;height:4px;background:#3b82f6;display:inline-block;margin-right:5px;border-radius:2px;"></i>合併營收
+          </span>
+          <span style="display:inline-flex;align-items:center;margin-right:10px;">
+            <i style="width:10px;height:0;border-top:2px solid #f59e0b;display:inline-block;margin-right:5px;"></i>年增率 YoY
+          </span>
+          <span style="display:inline-flex;align-items:center;">
+            <i style="width:10px;height:0;border-top:2px solid #06b6d4;display:inline-block;margin-right:5px;"></i>月增率 MoM
+          </span>
         </div>
       </div>
-      <div class="treemap-wrap"><svg id="upTreemap"></svg></div>
-      <div id="upHint" class="meta" style="margin-top:6px"></div>
-    </section>
-
-    <section class="column" id="downstreamCol">
-      <div class="section-head">
-        <h2>下游產業</h2>
-        <div class="legend">
-          <span class="chip pos-chip">表現佳</span>
-          <span class="chip neu-chip">中性</span>
-          <span class="chip neg-chip">表現弱</span>
-        </div>
+      <div id="revComboWrap" style="position:relative; width:100%; height:320px;">
+        <svg id="revComboSvg" style="width:100%; height:100%;"></svg>
       </div>
-      <div class="treemap-wrap"><svg id="downTreemap"></svg></div>
-      <div id="downHint" class="meta" style="margin-top:6px"></div>
+      <div id="revComboHint" class="hint" style="margin: 4px 8px 0;"></div>
     </section>
-  
+  </main>
 
-<!-- === 產業供應鏈（流程＋可點節點） === -->
-<section id="sc-section" style="margin: 24px 16px 48px;">
-  <h2 style="margin:0 0 12px;">產業鏈流程 & 概念股（互動）</h2>
-  <div id="sc-grid">
-    <aside id="sc-left">
-      <div id="sc-list-title">📌 請先點右方節點（例如：IC封裝）</div>
-      <ul id="sc-stock-list"></ul>
-    </aside>
-    <div id="sc-right">
-      <svg id="sc-svg" class="sc-svg" viewBox="0 0 1000 620" preserveAspectRatio="xMidYMid meet" style="width:100%;height:520px"></svg>
-    </div>
-  </div>
-</section>
-<style>
-  #sc-grid{ display:grid; grid-template-columns: 360px 1fr; gap:16px; }
-  @media (max-width: 900px){ #sc-grid{ grid-template-columns: 1fr; } }
-  #sc-left{ background:rgba(15,23,42,.4); border:1px solid rgba(255,255,255,.08); border-radius:8px; padding:12px; min-height: 200px; color:#e5e7eb; }
-  #sc-list-title{ font-weight:700; margin-bottom:8px; }
-  #sc-stock-list{ list-style:none; margin:0; padding:0;}
-  #sc-stock-list li{ padding:8px 6px; border-bottom:1px dashed rgba(255,255,255,.12); display:flex; align-items:center; gap:8px;}
-  #sc-stock-list .code{ font-weight:700; color:#fff; min-width:56px; }
-  #sc-stock-list .chip{ font-size:12px; padding:2px 6px; border-radius:999px; background:rgba(255,255,255,.12)}
-  #sc-stock-list li button{ margin-left:auto; padding:4px 8px; font-size:12px; border:1px solid rgba(255,255,255,.18); background:transparent; color:#e5e7eb; border-radius:6px; cursor:pointer; }
-  #sc-right{ background:rgba(15,23,42,.4); border:1px solid rgba(255,255,255,.08); border-radius:8px; padding:10px; }
-  .sc-link{ stroke:#bdbdbd; stroke-width:1.5px; marker-end:url(#sc-arrow); }
-  .sc-node circle{ fill:#ff8a8a; stroke:#cc6666; stroke-width:1.5px; cursor:pointer; }
-  .sc-node text{ fill:#e5e7eb; font-size:13px; pointer-events:none; }
-  .sc-node.highlight circle{ fill:#e74c3c; stroke:#b60e0e; stroke-width:3px; }
-</style>
-<script>
-  (function(){ var VER = new URLSearchParams(location.search).get('v')||Date.now();
-    document.write('<script src="supplychain.js?v='+VER+'">\x3C/script>');
-  })();
-</script>
-
-</main>
-
-  <script>
-    document.write('<script src="app.js?v='+VER+'"><\/script>');
-    document.write('<script src="stock-link-plugin.js?v='+VER+'"><\/script>');
-    document.write('<script src="app_query_link_B.js?v='+VER+'"><\/script>');
-  </script>
+  <!-- libs -->
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- app -->
+  <script src="./app.js"></script>
 </body>
 </html>
