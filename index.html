@@ -1,4 +1,117 @@
 
-<script>
-  document.write('<script src="treemap-tooltip.js?v='+VER+'"><\/script>');
-</script>
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>營收互動儀錶板｜供應鏈月營收熱力圖（診斷版）</title>
+  <script>
+    const VER = new URLSearchParams(location.search).get('v') || Date.now();
+    document.write('<link rel="stylesheet" href="styles.css?v='+VER+'">');
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <style>
+    body { margin: 0; }
+    .page-title { margin: 16px 16px 8px; font-weight: 700; font-size: 30px; line-height: 1.25; color: #fff; }
+    .controls { margin: 8px 16px 12px; }
+    .layout { margin: 0 16px 24px; }
+
+    /* 組合圖新增樣式 */
+    .chart-section { margin: 8px 0 24px; }
+    .chart-wrap { background: rgba(15,23,42,.35); border: 1px solid rgba(255,255,255,.08); border-radius: 8px; padding: 8px 8px 2px; }
+    #comboChart { width: 100%; height: 380px; display: block; }
+    .axis path, .axis line { stroke: rgba(255,255,255,.15); }
+    .axis text { fill: #e5e7eb; font-size: 12px; }
+    .x.axis text { transform: translateY(4px); }
+    .y.axis-left text { fill: #eab308; }
+    .y.axis-right text { fill: #9be2ff; }
+
+    .bar-fixed { fill: #e74c3c; opacity: .9; }
+    .line-mom { fill: none; stroke: #f4d03f; stroke-width: 2px; }
+    .line-yoy { fill: none; stroke: #00d8d6; stroke-width: 2px; }
+    .zero-line { stroke: rgba(255,255,255,.25); stroke-dasharray: 4 4; }
+    .legend-row { display: flex; align-items:center; gap:12px; color:#e5e7eb; margin: 6px 2px 0; flex-wrap: wrap; }
+    .legend-row .chip { display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:2px 8px; border-radius:999px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); }
+    .chip .swatch { width:12px; height:12px; border-radius:2px; display:inline-block; }
+    .meta { color: #cbd5e1; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1 class="page-title">營收互動儀錶板</h1>
+
+  <section class="controls">
+    <div class="field">
+      <label for="stockInput">股票代號 / 名稱</label>
+      <input id="stockInput" type="text" placeholder="例如：2330 或 台積電" />
+    </div>
+    <div class="field">
+      <label for="monthSelect">月份</label>
+      <select id="monthSelect"></select>
+    </div>
+    <div class="field">
+      <label for="metricSelect">指標</label>
+      <select id="metricSelect">
+        <option value="YoY">年成長 (YoY)</option>
+        <option value="MoM">月變動 (MoM)</option>
+      </select>
+    </div>
+    <button id="runBtn" class="primary">查詢</button>
+    <div id="resultChip" class="result-chip" aria-live="polite"></div>
+    <span id="status" class="status" style="margin-left:8px"></span>
+  </section>
+
+  <main class="layout">
+    <section class="column" id="upstreamCol">
+      <div class="section-head">
+        <h2>上游產業</h2>
+        <div class="legend">
+          <span class="chip pos-chip">表現佳</span>
+          <span class="chip neu-chip">中性</span>
+          <span class="chip neg-chip">表現弱</span>
+        </div>
+      </div>
+      <div class="treemap-wrap"><svg id="upTreemap"></svg></div>
+      <div id="upHint" class="meta" style="margin-top:6px"></div>
+    </section>
+
+    <section class="column" id="downstreamCol">
+      <div class="section-head">
+        <h2>下游產業</h2>
+        <div class="legend">
+          <span class="chip pos-chip">表現佳</span>
+          <span class="chip neu-chip">中性</span>
+          <span class="chip neg-chip">表現弱</span>
+        </div>
+      </div>
+      <div class="treemap-wrap"><svg id="downTreemap"></svg></div>
+      <div id="downHint" class="meta" style="margin-top:6px"></div>
+    </section>
+
+    <!-- 新增：營收走勢（組合圖） -->
+    <section class="chart-section" id="combo-section">
+      <div class="section-head">
+        <h2>營收走勢</h2>
+        <div class="legend-row">
+          <span class="chip"><i class="swatch" style="background:#e74c3c"></i> 合併營收</span>
+          <span class="chip"><i class="swatch" style="background:#f4d03f"></i> 月增率 (MoM)</span>
+          <span class="chip"><i class="swatch" style="background:#00d8d6"></i> 年增率 (YoY)</span>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <svg id="comboChart"></svg>
+      </div>
+      <!-- 依需求：移除底部白字，改為不顯示 -->
+      <div id="comboHint" class="meta" style="display:none"></div>
+    </section>
+
+  </main>
+
+  <script>
+    document.write('<script src="app.js?v='+VER+'"><\/script>');
+    document.write('<script src="stock-link-plugin.js?v='+VER+'"><\/script>');
+    document.write('<script src="app_query_link_B.js?v='+VER+'"><\/script>');
+    document.write('<script src="combo-chart.js?v='+VER+'"><\/script>');
+  </script>
+</body>
+</html>
