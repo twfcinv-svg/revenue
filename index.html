@@ -36,16 +36,20 @@
     .chip .swatch { width:12px; height:12px; border-radius:2px; display:inline-block; }
     .meta { color: #cbd5e1; font-size: 12px; }
 
-    /* 個股產業鏈面板（兩欄版） */
+    /* 個股產業鏈面板（兩欄 + 可摺疊） */
     #icp-section { margin: 24px 16px; }
     #icp-section .section-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+
+    /* 折疊容器 */
+    #icp-fold-wrap { position: relative; }
+    #icp-scroll { overflow: hidden; transition: max-height .25s ease; }
+    #icp-fade { position:absolute; left:0; right:0; height:42px; bottom:0; background:linear-gradient(to bottom, rgba(15,23,42,0), rgba(15,23,42,.95)); pointer-events:none; display:none; }
+    #icp-expander { position:absolute; left:50%; transform:translateX(-50%); width:28px; height:28px; line-height:28px; text-align:center; border:1px solid #fff; color:#fff; background:transparent; border-radius:50%; cursor:pointer; z-index:10; user-select:none; }
+
     #icp-grid { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
     .icp-box { background: rgba(15,23,42,.40); border:1px solid rgba(255,255,255,.08); border-radius:8px; padding:10px; color:#e5e7eb; min-height:180px; }
-    /* 1) 區塊標題：白色、加大 */
     .icp-title { font-weight:900; letter-spacing:.5px; margin:4px 0 10px; color:#ffffff; font-size:16px; }
 
-    /* 產業卡（群組）與個股清單視覺差異化 */
-    /* 2) 產業標題改為淡藍色 */
     .icp-card { background: rgba(255,255,255,.02); border:1px dashed rgba(255,255,255,.18); border-radius:8px; padding:10px; margin-bottom:10px; transition: border-color .15s ease, box-shadow .15s ease; }
     .icp-card:hover { border-color:#ffffff; box-shadow: 0 0 0 1px #ffffff inset; }
     .icp-card-title { font-weight:800; color:#93c5fd; margin-bottom:6px; font-size:14px; letter-spacing:.3px; }
@@ -110,18 +114,24 @@
       <div id="downHint" class="meta" style="margin-top:6px"></div>
     </section>
 
-    <!-- 個股產業鏈（兩欄版：左=上游供應鏈；右=下游客戶） -->
+    <!-- 個股產業鏈（兩欄 + 可摺疊）：左=上游供應鏈；右=下游客戶 -->
     <section id="icp-section">
       <div class="section-head"><h2>個股產業鏈</h2><div class="icp-note">依 data.xlsx 的 Revenue / Links 工作表推論</div></div>
-      <div id="icp-grid">
-        <aside class="icp-box">
-          <div class="icp-title">上游供應鏈</div>
-          <div id="icp-up-wrap"></div>
-        </aside>
-        <aside class="icp-box">
-          <div class="icp-title">下游客戶</div>
-          <div id="icp-down-wrap"></div>
-        </aside>
+      <div id="icp-fold-wrap">
+        <div id="icp-scroll">
+          <div id="icp-grid">
+            <aside class="icp-box">
+              <div class="icp-title">上游供應鏈</div>
+              <div id="icp-up-wrap"></div>
+            </aside>
+            <aside class="icp-box">
+              <div class="icp-title">下游客戶</div>
+              <div id="icp-down-wrap"></div>
+            </aside>
+          </div>
+        </div>
+        <div id="icp-fade"></div>
+        <div id="icp-expander" aria-expanded="false" role="button" title="展開/收合">＋</div>
       </div>
     </section>
 

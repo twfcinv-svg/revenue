@@ -1,8 +1,9 @@
 
-/* industry-chain-panel.js (enhanced)
- * - 左欄標題：上游供應鏈；右欄標題：下游客戶（由 index.html 控制文字）
- * - 中欄（Peers）已於 index 隱藏；此檔保留函式但不渲染中欄
- * - 產業卡片 hover 亮白框；個股 hover 加粗＋微浮起；點擊個股開啟外部頁面
+/* industry-chain-panel.js (foldable v3)
+ * 新增：
+ *  - 左/右清單支援「摺疊/展開」，預設顯示高度與右側「營收走勢」底部齊平。
+ *  - 點擊「＋ / －」按鈕展開/收合；視窗縮放與圖表重繪時自動重算高度與按鈕位置。
+ *  - 既有功能（讀 data.xlsx、渲染上/下游、群組卡 hover 亮邊、個股 hover 浮起、點擊開外網）維持。
  */
 (function(){
   const $ = (s)=> document.querySelector(s);
@@ -12,18 +13,12 @@
   // -------- Helpers --------
   function norm(s){ return String(s||'').trim(); }
   function detectCol(headers, patterns){
-    for(const p of patterns){
-      for(const h of headers){ if(p.test(h)) return h; }
-    }
+    for(const p of patterns){ for(const h of headers){ if(p.test(h)) return h; } }
     return null;
   }
   function groupBy(arr, keyFn){
     const map = new Map();
-    for(const x of arr){
-      const k = keyFn(x) || '';
-      if(!map.has(k)) map.set(k, []);
-      map.get(k).push(x);
-    }
+    for(const x of arr){ const k = keyFn(x)||''; if(!map.has(k)) map.set(k,[]); map.get(k).push(x); }
     return map;
   }
 
@@ -35,7 +30,6 @@
     const buf = await res.arrayBuffer();
     const wb = XLSX.read(buf, { type:'array' });
 
-    // Revenue
     const revName = wb.SheetNames.find(n=>/revenue|營收/i.test(n)) || wb.SheetNames[0];
     const rev = XLSX.utils.sheet_to_json(wb.Sheets[revName], { defval:null });
     if(!rev.length) throw new Error('Revenue 工作表為空');
@@ -47,7 +41,6 @@
     const revRows = rev.map(r=>({ code:norm(r[colCode]), name:norm(r[colName]), industry:norm(r[colInd]) }))
                        .filter(r=>r.code || r.name);
 
-    // Links
     const linkName = wb.SheetNames.find(n=>/link|關聯|關係|供應鏈/i.test(n));
     let linksRows = [];
     if(linkName){
@@ -62,19 +55,12 @@
       }
     }
 
-    const byCode = new Map();
-    for(const r of revRows){ if(r.code) byCode.set(r.code, r); }
-
-    const upstreamOf = new Map();
-    const downstreamOf = new Map();
-    for(const l of linksRows){
-      if(l.up && l.down){
-        if(!downstreamOf.has(l.up)) downstreamOf.set(l.up, []);
-        downstreamOf.get(l.up).push(l.down);
-        if(!upstreamOf.has(l.down)) upstreamOf.set(l.down, []);
-        upstreamOf.get(l.down).push(l.up);
-      }
-    }
+    const byCode = new Map(); for(const r of revRows){ if(r.code) byCode.set(r.code, r); }
+    const upstreamOf = new Map(), downstreamOf = new Map();
+    for(const l of linksRows){ if(l.up && l.down){
+      if(!downstreamOf.has(l.up)) downstreamOf.set(l.up, []); downstreamOf.get(l.up).push(l.down);
+      if(!upstreamOf.has(l.down)) upstreamOf.set(l.down, []); upstreamOf.get(l.down).push(l.up);
+    }}
 
     Object.assign(cache, { loaded:true, revRows, byCode, upstreamOf, downstreamOf });
     return cache;
@@ -100,9 +86,53 @@
   }
 
   function findStock(byCode, rows, keyword){
-    const k = norm(keyword);
-    if(!k) return null;
+    const k = norm(keyword); if(!k) return null;
     return byCode.get(k) || rows.find(r=>r.name===k) || null;
+  }
+
+  // -------- Fold / Expand --------
+  function setFoldToChartHeight(){
+    const wrap = $('#icp-fold-wrap');
+    const scroll = $('#icp-scroll');
+    const btn = $('#icp-expander');
+    const fade = $('#icp-fade');
+    const chart = document.querySelector('#combo-section .chart-wrap');
+    if(!wrap || !scroll || !btn || !chart) return;
+
+    const chartRect = chart.getBoundingClientRect();
+    const wrapRect = wrap.getBoundingClientRect();
+    const isExpanded = btn.getAttribute('aria-expanded') === 'true';
+
+    // 設定摺疊高度 = 圖表容器高度
+    if(!isExpanded){
+      const h = Math.max(0, Math.round(chartRect.height));
+      scroll.style.maxHeight = h + 'px';
+      if(fade) fade.style.display = 'block';
+    }else{
+      scroll.style.maxHeight = scroll.scrollHeight + 'px';
+      if(fade) fade.style.display = 'none';
+    }
+
+    // 讓「＋」與摺疊線與圖表底對齊（同一水平線）
+    const top = Math.round(chartRect.bottom - wrapRect.top - (btn.offsetHeight/2));
+    btn.style.top = (top < 0 ? 0 : top) + 'px';
+  }
+
+  function toggleFold(){
+    const btn = $('#icp-expander');
+    const expanded = btn.getAttribute('aria-expanded') === 'true';
+    btn.setAttribute('aria-expanded', String(!expanded));
+    btn.textContent = expanded ? '＋' : '－';
+    setFoldToChartHeight();
+  }
+
+  function installObservers(){
+    const chart = document.querySelector('#combo-section .chart-wrap');
+    if(chart){
+      const ro = new ResizeObserver(()=> setFoldToChartHeight());
+      ro.observe(chart);
+    }
+    window.addEventListener('resize', setFoldToChartHeight);
   }
 
   async function updatePanel(){
@@ -111,40 +141,38 @@
     const me = findStock(byCode, revRows, kw);
     const upWrap = $('#icp-up-wrap');
     const downWrap = $('#icp-down-wrap');
-    const centerPeers = $('#icp-center-peers'); // 中欄已隱藏，但保留清空
 
-    if(centerPeers) centerPeers.innerHTML = '';
-    if(!me){
-      if(upWrap) upWrap.innerHTML = '';
-      if(downWrap) downWrap.innerHTML = '';
-      return;
-    }
+    if(!me){ if(upWrap) upWrap.innerHTML=''; if(downWrap) downWrap.innerHTML=''; setFoldToChartHeight(); return; }
 
-    const ups = upstreamOf.get(me.code) || [];
-    renderGroupList(upWrap, ups, byCode);
+    renderGroupList(upWrap, upstreamOf.get(me.code) || [], byCode);
+    renderGroupList(downWrap, downstreamOf.get(me.code) || [], byCode);
 
-    const downs = downstreamOf.get(me.code) || [];
-    renderGroupList(downWrap, downs, byCode);
-
-    // 綁定點擊（事件委派）→ 開啟外部網址
-    function bindClick(root){
-      if(!root) return;
-      root.addEventListener('click', (e)=>{
-        const li = e.target.closest('.icp-stock');
-        if(!li) return;
-        const code = li.getAttribute('data-code');
-        if(!code) return;
-        const base = 'https://www.fbs.com.tw/MKT/Index?name=' + encode('Ｊ線圖') + '&stock=' + encode(code);
-        window.open(base, '_blank');
-      });
-    }
+    // 事件委派：點個股開外部頁
+    function bindClick(root){ if(!root) return; root.addEventListener('click', (e)=>{
+      const li = e.target.closest('.icp-stock'); if(!li) return;
+      const code = li.getAttribute('data-code'); if(!code) return;
+      const url = 'https://www.fbs.com.tw/MKT/Index?name=' + encode('Ｊ線圖') + '&stock=' + encode(code);
+      window.open(url, '_blank');
+    }); }
     bindClick(upWrap); bindClick(downWrap);
+
+    // 渲染完成後依圖表高度設定摺疊線與按鈕位置
+    setTimeout(setFoldToChartHeight, 0);
   }
 
   document.addEventListener('DOMContentLoaded', async ()=>{
     try{ await loadAll(); }catch(e){ console.error(e); }
-    const btn = $('#runBtn');
-    if(btn) btn.addEventListener('click', ()=> setTimeout(updatePanel, 0));
+
+    // 建立「＋ / －」按鈕事件
+    const btn = document.getElementById('icp-expander');
+    if(btn){ btn.addEventListener('click', toggleFold); }
+
+    // 綁定查詢與初始渲染
+    const run = document.getElementById('runBtn');
+    if(run){ run.addEventListener('click', ()=> setTimeout(updatePanel, 0)); }
     setTimeout(updatePanel, 0);
+
+    // 監看圖表尺寸（RWD / 重繪）
+    installObservers();
   });
 })();
