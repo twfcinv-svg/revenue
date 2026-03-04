@@ -1,70 +1,86 @@
 
-/* treemap-tooltip.js  讓上方 Treemap 的個股格子支援「模式 A：跟著游標漂浮」的資訊卡
- * 需求：滑到 Treemap 的「葉節點」格子時，顯示：代碼＋名稱＋目前指標值（MoM/YoY）
- * 相依：D3 v7、頁面已有 #upTreemap、#downTreemap，且外層容器 .treemap-wrap 存在。
- * 用法：在 index.html 於 app.js / app_query_link_B.js 載入之後，再載入本檔。
+/* treemap-tooltip.js  上下游 Treemap：游標停留於個股格子時，顯示「產業｜代碼 名稱｜表現(%)」
+ * 內容格式（例）：
+ *   封測設備
+ *   7769 鴻勁
+ *   +73.9%
+ *
+ * 設計：
+ *  - Tooltip 以 .treemap-wrap 為定位容器，絕對定位跟著游標漂浮（模式 A）。
+ *  - 產業、代碼、名稱、表現值皆做容錯：
+ *     · code: data.code / 個股 / stock / symbol
+ *     · name: data.name / 名稱 / title
+ *     · industry: data.industry / 產業 / 產業別 / group / category；若無則向 parent.data.* 尋找
+ *     · value: node.value 優先；否則 data.YoY / data.MoM；最後 data.value
  */
 (function(){
   const $ = (s)=> document.querySelector(s);
   const $$closest = (el, sel) => (el && el.closest) ? el.closest(sel) : null;
 
-  // 建立 tooltip（掛到 .treemap-wrap 裡，避免受全站 CSS 影響）
-  function createTooltipHost(svg){
+  function ensureHost(svg){
     const wrap = $$closest(svg, '.treemap-wrap') || svg.parentNode || document.body;
-    const style = getComputedStyle(wrap);
-    if(style.position === 'static') wrap.style.position = 'relative';
-    const tip = document.createElement('div');
-    tip.className = 'treemap-tooltip';
-    Object.assign(tip.style, {
-      position: 'absolute', pointerEvents: 'none', display: 'none',
-      padding: '8px 10px', fontSize: '12px', lineHeight: '1.4',
-      color: '#fff', background: 'rgba(0,0,0,0.82)',
-      border: '1px solid rgba(255,255,255,0.18)', borderRadius: '8px',
-      boxShadow: '0 4px 14px rgba(0,0,0,.35)', zIndex: 1000, whiteSpace: 'nowrap'
-    });
-    wrap.appendChild(tip);
+    if(getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
+    let tip = wrap.querySelector(':scope > .treemap-tooltip');
+    if(!tip){
+      tip = document.createElement('div');
+      tip.className = 'treemap-tooltip';
+      Object.assign(tip.style, {
+        position:'absolute', pointerEvents:'none', display:'none',
+        padding:'8px 10px', fontSize:'12px', lineHeight:'1.5',
+        color:'#fff', background:'rgba(0,0,0,0.82)',
+        border:'1px solid rgba(255,255,255,0.18)', borderRadius:'8px',
+        boxShadow:'0 4px 14px rgba(0,0,0,.35)', zIndex:1000, whiteSpace:'nowrap'
+      });
+      wrap.appendChild(tip);
+    }
     return { wrap, tip };
   }
 
-  function getMetricLabel(){
-    const sel = $('#metricSelect');
-    if(!sel) return '指標';
-    const opt = sel.options[sel.selectedIndex];
-    // 你的 index.html 裡 option 已寫明顯示文字
-    return (opt && opt.textContent) ? opt.textContent : sel.value || '指標';
+  function fmtPct(v){ if(v==null || isNaN(v)) return ''; return d3.format('+.1f')(+v) + '%'; }
+
+  function getVal(d){
+    if(d && typeof d.value === 'number') return d.value;
+    const src = d && (d.data || d);
+    if(src && typeof src.YoY === 'number') return src.YoY;
+    if(src && typeof src.MoM === 'number') return src.MoM;
+    if(src && typeof src.value === 'number') return src.value;
+    return null;
   }
 
-  function fmtPct(v){
-    if(v==null || isNaN(v)) return '';
-    const f = d3.format('+.1f');
-    return f(+v) + '%';
+  function getCode(src){ return src.code || src['個股'] || src.stock || src.symbol || ''; }
+  function getName(src){ return src.name || src['名稱'] || src.title || ''; }
+
+  function getIndustry(d){
+    const src = d && (d.data || d) || {};
+    const keys = ['industry','產業','產業別','group','category'];
+    for(const k of keys){ if(src[k]) return src[k]; }
+    // 往父節點找（常見 treemap 分群）
+    let p = d && d.parent;
+    while(p){
+      const pd = p.data || {};
+      for(const k of ['industry','產業','產業別','group','category','name','title','label']){
+        if(pd[k]) return pd[k];
+      }
+      p = p.parent;
+    }
+    return '';
   }
 
-  function extractDatumInfo(d){
-    // 嘗試從 treemap node 或自訂欄位抓資訊（盡量容錯）
-    const src = d && (d.data || d); // d3.treemap 的 node 會有 data
-    const code = src && (src.code || src.個股 || src.stock || src.symbol || '');
-    const name = src && (src.name || src.名稱 || src.title || '');
-    // 目前 treemap 的數值通常是百分比（MoM/YoY），常放在 value 或 YoY/MoM 欄位
-    let val = (d && d.value!=null) ? d.value : (src && (src.YoY!=null ? src.YoY : src.MoM));
-    if(val==null && src && src.value!=null) val = src.value;
-    return { code, name, val };
-  }
-
-  function placeTooltipNearMouse(evt, host){
+  function placeTip(evt, host){
     const rect = host.wrap.getBoundingClientRect();
-    const mx = evt.clientX - rect.left;  // 容器內座標
+    const mx = evt.clientX - rect.left;
     const my = evt.clientY - rect.top;
-    const offX = 14, offY = 12;          // 右上角偏移
+    const offX = 14, offY = 12; // 右上角偏移
 
     const tip = host.tip;
     tip.style.display = 'block';
     tip.style.visibility = 'hidden';
-    const tw = tip.offsetWidth || 160;
-    const th = tip.offsetHeight || 80;
+    const tw = tip.offsetWidth || 160, th = tip.offsetHeight || 72;
 
     let left = mx + offX;
-    let top  = my - th - offY;
+    let top  = my - th - offY; // 優先放在游標上方
+
+    // 邊界保護
     if(left + tw > rect.width - 6) left = mx - tw - 8; // 右界
     if(top < 6) top = my + 12;                         // 上界
     if(left < 6) left = 6;
@@ -78,12 +94,27 @@
   function bindOne(svgId){
     const svg = document.getElementById(svgId);
     if(!svg) return;
-    const host = createTooltipHost(svg);
-
+    const host = ensureHost(svg);
     const sel = d3.select(svg);
 
+    function renderTip(evt, datum){
+      const nodeData = datum || {};
+      const src = (nodeData.data || nodeData || {});
+      const industry = getIndustry(nodeData) || '';
+      const code = getCode(src);
+      const name = getName(src);
+      const val = getVal(nodeData);
+
+      host.tip.innerHTML = (
+        (industry?('<div><b>'+industry+'</b></div>'):'') +
+        '<div>'+ (code?code+' ':'') + (name||'') + '</div>'+
+        '<div><b>'+ fmtPct(val) +'</b></div>'
+      );
+      placeTip(evt, host);
+    }
+
     function bind(){
-      // 只綁「葉節點」：有 rect 且沒有 child g 的 group，或直接綁 rect 且有 data
+      // 葉節點 group
       const cells = sel.selectAll('g').filter(function(){
         const g = d3.select(this);
         const hasRect = !g.select('rect').empty();
@@ -92,47 +123,28 @@
       });
 
       cells.style('pointer-events','all')
-        .on('mousemove', function(evt, d){
-          const info = extractDatumInfo(d || d3.select(this).datum());
-          const title = (info.code?info.code+' ':'') + (info.name||'');
-          const metric = getMetricLabel();
-          host.tip.innerHTML = (
-            '<div><b>'+ title +'</b></div>'+
-            '<div>'+ metric +'：<b>'+ fmtPct(info.val) +'</b></div>'
-          );
-          placeTooltipNearMouse(evt, host);
-        })
+        .on('mousemove', function(evt, d){ renderTip(evt, d || d3.select(this).datum()); })
         .on('mouseleave', function(){ host.tip.style.display='none'; });
 
-      // 也讓 rect 直接綁（以防 group 結構不同）
+      // 防止不同結構：直接對所有 rect 再綁一次
       sel.selectAll('rect')
         .style('pointer-events','all')
         .on('mousemove', function(evt, d){
-          const info = extractDatumInfo(d || d3.select(this).datum());
-          if(!info.code && !info.name && (this.parentNode)){
-            // 嘗試從父層 g 中抓
+          let datum = d || d3.select(this).datum();
+          if(!datum || (!datum.data && this.parentNode)){
             const pd = d3.select(this.parentNode).datum();
-            const tmp = extractDatumInfo(pd);
-            if(tmp.code||tmp.name||tmp.val!=null) Object.assign(info, tmp);
+            if(pd) datum = pd;
           }
-          const title = (info.code?info.code+' ':'') + (info.name||'');
-          const metric = getMetricLabel();
-          host.tip.innerHTML = (
-            '<div><b>'+ title +'</b></div>'+
-            '<div>'+ metric +'：<b>'+ fmtPct(info.val) +'</b></div>'
-          );
-          placeTooltipNearMouse(evt, host);
+          renderTip(evt, datum);
         })
         .on('mouseleave', function(){ host.tip.style.display='none'; });
     }
 
-    // 先綁一次
     bind();
-
-    // 若 treemap 重繪（查詢或 RWD）→ 再次綁定
     const mo = new MutationObserver(()=>{ bind(); });
     mo.observe(svg, { childList:true, subtree:true });
 
+    // 供外部在查詢/重繪後手動觸發
     window.__rebindTreemapTooltip = window.__rebindTreemapTooltip || (()=>{ bind(); });
   }
 
@@ -142,7 +154,8 @@
 
     const btn = $('#runBtn');
     if(btn) btn.addEventListener('click', ()=>{
-      setTimeout(()=>{ if(window.__rebindTreemapTooltip) window.__rebindTreemapTooltip(); }, 50);
+      // treemap 重繪後稍等再重綁
+      setTimeout(()=>{ if(window.__rebindTreemapTooltip) window.__rebindTreemapTooltip(); }, 60);
     });
 
     window.addEventListener('resize', ()=>{
