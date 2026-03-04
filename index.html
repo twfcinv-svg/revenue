@@ -41,19 +41,21 @@
     #icp-section .section-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
     #icp-grid { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
     .icp-box { background: rgba(15,23,42,.40); border:1px solid rgba(255,255,255,.08); border-radius:8px; padding:10px; color:#e5e7eb; min-height:180px; }
-    .icp-title { font-weight:800; letter-spacing:.5px; margin:4px 0 10px; color:#93c5fd; font-size:14px; }
+    /* 1) 區塊標題：白色、加大 */
+    .icp-title { font-weight:900; letter-spacing:.5px; margin:4px 0 10px; color:#ffffff; font-size:16px; }
 
     /* 產業卡（群組）與個股清單視覺差異化 */
+    /* 2) 產業標題改為淡藍色 */
     .icp-card { background: rgba(255,255,255,.02); border:1px dashed rgba(255,255,255,.18); border-radius:8px; padding:10px; margin-bottom:10px; transition: border-color .15s ease, box-shadow .15s ease; }
     .icp-card:hover { border-color:#ffffff; box-shadow: 0 0 0 1px #ffffff inset; }
-    .icp-card-title { font-weight:700; color:#e2e8f0; margin-bottom:6px; font-size:13px; letter-spacing:.3px; text-transform: none; }
+    .icp-card-title { font-weight:800; color:#93c5fd; margin-bottom:6px; font-size:14px; letter-spacing:.3px; }
 
     .icp-box ul { list-style:none; margin:0; padding:0; }
     .icp-box li { padding:4px 2px; border-bottom:1px dashed rgba(255,255,255,.08); font-size:13px; line-height:1.35; transition: transform .12s ease, font-weight .12s ease, color .12s ease; cursor:pointer; }
     .icp-box li:hover { font-weight:800; transform: translateY(-1px); color:#ffffff; }
     .icp-box .code { display:inline-block; min-width:52px; color:#fff; font-weight:700; }
 
-    .icp-note { font-size:12px; opacity:.8; }
+    .icp-note { display:none; }
     @media (max-width: 980px){ #icp-grid{ grid-template-columns: 1fr; } }
   </style>
 </head>
