@@ -1,17 +1,7 @@
 
-/* treemap-tooltip.js  上下游 Treemap：游標停留於個股格子時，顯示「產業｜代碼 名稱｜表現(%)」
- * 內容格式（例）：
- *   封測設備
- *   7769 鴻勁
- *   +73.9%
- *
- * 設計：
- *  - Tooltip 以 .treemap-wrap 為定位容器，絕對定位跟著游標漂浮（模式 A）。
- *  - 產業、代碼、名稱、表現值皆做容錯：
- *     · code: data.code / 個股 / stock / symbol
- *     · name: data.name / 名稱 / title
- *     · industry: data.industry / 產業 / 產業別 / group / category；若無則向 parent.data.* 尋找
- *     · value: node.value 優先；否則 data.YoY / data.MoM；最後 data.value
+/* treemap-tooltip.js  v2
+ * 修正：數值改「優先讀取格子上顯示的百分比文字」，確保與方塊一致（例如 +74.5%）。
+ * 若該文字不存在，再回退到 node.value / data.YoY / data.MoM。
  */
 (function(){
   const $ = (s)=> document.querySelector(s);
@@ -54,7 +44,7 @@
     const src = d && (d.data || d) || {};
     const keys = ['industry','產業','產業別','group','category'];
     for(const k of keys){ if(src[k]) return src[k]; }
-    // 往父節點找（常見 treemap 分群）
+    // 往父節點找（treemap 常見用 parent 表示產業分群）
     let p = d && d.parent;
     while(p){
       const pd = p.data || {};
@@ -64,6 +54,18 @@
       p = p.parent;
     }
     return '';
+  }
+
+  // 從當前 cell 的文字中直接抓百分比，確保與方塊一致
+  function getDisplayPctFromCell(node){
+    if(!node) return null;
+    const g = $$closest(node, 'g') || node;
+    const texts = g.querySelectorAll('text');
+    let buf = '';
+    texts.forEach(t => { buf += ' ' + (t.textContent || ''); });
+    const m = buf.match(/([+-]?\d+(?:\.\d+)?)\s*%/);
+    if(m) return m[0].replace(/\s+/g,''); // 保留原有正負與%號
+    return null;
   }
 
   function placeTip(evt, host){
@@ -80,7 +82,6 @@
     let left = mx + offX;
     let top  = my - th - offY; // 優先放在游標上方
 
-    // 邊界保護
     if(left + tw > rect.width - 6) left = mx - tw - 8; // 右界
     if(top < 6) top = my + 12;                         // 上界
     if(left < 6) left = 6;
@@ -97,24 +98,30 @@
     const host = ensureHost(svg);
     const sel = d3.select(svg);
 
-    function renderTip(evt, datum){
+    function renderTip(evt, datum, node){
       const nodeData = datum || {};
       const src = (nodeData.data || nodeData || {});
       const industry = getIndustry(nodeData) || '';
       const code = getCode(src);
       const name = getName(src);
-      const val = getVal(nodeData);
+
+      // 1) 先讀 cell 上顯示的百分比文字
+      let pctStr = getDisplayPctFromCell(node);
+      // 2) 萬一沒有，才回退採資料欄位
+      if(!pctStr){
+        const val = getVal(nodeData);
+        pctStr = fmtPct(val);
+      }
 
       host.tip.innerHTML = (
         (industry?('<div><b>'+industry+'</b></div>'):'') +
         '<div>'+ (code?code+' ':'') + (name||'') + '</div>'+
-        '<div><b>'+ fmtPct(val) +'</b></div>'
+        '<div><b>'+ pctStr +'</b></div>'
       );
       placeTip(evt, host);
     }
 
     function bind(){
-      // 葉節點 group
       const cells = sel.selectAll('g').filter(function(){
         const g = d3.select(this);
         const hasRect = !g.select('rect').empty();
@@ -123,10 +130,9 @@
       });
 
       cells.style('pointer-events','all')
-        .on('mousemove', function(evt, d){ renderTip(evt, d || d3.select(this).datum()); })
+        .on('mousemove', function(evt, d){ renderTip(evt, d || d3.select(this).datum(), this); })
         .on('mouseleave', function(){ host.tip.style.display='none'; });
 
-      // 防止不同結構：直接對所有 rect 再綁一次
       sel.selectAll('rect')
         .style('pointer-events','all')
         .on('mousemove', function(evt, d){
@@ -135,7 +141,7 @@
             const pd = d3.select(this.parentNode).datum();
             if(pd) datum = pd;
           }
-          renderTip(evt, datum);
+          renderTip(evt, datum, this);
         })
         .on('mouseleave', function(){ host.tip.style.display='none'; });
     }
@@ -144,7 +150,6 @@
     const mo = new MutationObserver(()=>{ bind(); });
     mo.observe(svg, { childList:true, subtree:true });
 
-    // 供外部在查詢/重繪後手動觸發
     window.__rebindTreemapTooltip = window.__rebindTreemapTooltip || (()=>{ bind(); });
   }
 
@@ -154,7 +159,6 @@
 
     const btn = $('#runBtn');
     if(btn) btn.addEventListener('click', ()=>{
-      // treemap 重繪後稍等再重綁
       setTimeout(()=>{ if(window.__rebindTreemapTooltip) window.__rebindTreemapTooltip(); }, 60);
     });
 
