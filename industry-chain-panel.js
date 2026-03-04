@@ -1,10 +1,7 @@
 
-/* industry-chain-panel.js (foldable v5)
- * 強化：左側清單「同頂同底」絕對對齊右側 chart-wrap（含邊框）
- * 作法：
- *   1) 以 #icp-fold-wrap 為坐標系，計算 chart-wrap 的 top/bottom → 對應成 scroll.marginTop 與 wrap 的 targetHeight
- *   2) 折疊：scroll.maxHeight = targetHeight - marginTop；展開：scroll.maxHeight = scroll.scrollHeight
- *   3) 「＋/－」無圓圈粗體，垂直中心對齊 chart-wrap 的底緣
+/* industry-chain-panel.js (v6, row-aligned)
+ * 變更：將左「個股產業鏈」與右「營收走勢」放入相同 row（兩欄 panel）。
+ * 折疊高度與加號位置以右側 panel-body 為基準，保證同頂同底。
  */
 (function(){
   const $ = (s)=> document.querySelector(s);
@@ -73,24 +70,28 @@
 
   function findStock(byCode, rows, kw){ const k=norm(kw); return k? (byCode.get(k) || rows.find(r=>r.name===k) || null) : null; }
 
-  function setFoldToChartHeight(){
-    const wrap = document.getElementById('icp-fold-wrap');
+  function anchorRects(){
+    const leftBody  = document.querySelector('#icp-panel .panel-body');
+    const rightBody = document.querySelector('#chart-panel .panel-body');
+    if(!leftBody || !rightBody) return null;
+    return { leftBody, rightBody, leftRect:leftBody.getBoundingClientRect(), rightRect:rightBody.getBoundingClientRect() };
+  }
+
+  function setFoldToAnchor(){
+    const ctx = anchorRects();
     const scroll = document.getElementById('icp-scroll');
     const btn = document.getElementById('icp-expander');
     const fade = document.getElementById('icp-fade');
-    const chart = document.querySelector('#combo-section .chart-wrap');
-    if(!wrap || !scroll || !btn || !chart) return;
+    if(!ctx || !scroll || !btn) return;
 
-    const wrapRect  = wrap.getBoundingClientRect();
-    const chartRect = chart.getBoundingClientRect();
+    const { leftRect, rightRect } = ctx;
     const isExpanded = btn.getAttribute('aria-expanded') === 'true';
 
-    // 目標可視高度 = chart 底 - chart 頂（含邊框）
-    const targetTop    = Math.round(chartRect.top    - wrapRect.top);
-    const targetBottom = Math.round(chartRect.bottom - wrapRect.top);
+    // 對齊右側 panel-body 的 top/bottom
+    const targetTop    = Math.round(rightRect.top    - leftRect.top);
+    const targetBottom = Math.round(rightRect.bottom - leftRect.top);
     const targetHeight = Math.max(0, targetBottom - targetTop);
 
-    // 同頂：把 scroll 往下推 targetTop；同底：折疊時限制高度為 targetHeight
     scroll.style.marginTop = (targetTop < 0 ? 0 : targetTop) + 'px';
     if(!isExpanded){
       scroll.style.maxHeight = targetHeight + 'px';
@@ -100,7 +101,7 @@
       if(fade) fade.style.display = 'none';
     }
 
-    // 「＋ / －」加號：對齊 chart 底的垂直中心
+    // 加號定位在右側 panel-body 底緣中線
     const top = Math.round(targetBottom - (btn.offsetHeight/2));
     btn.style.top = (top < 0 ? 0 : top) + 'px';
   }
@@ -110,13 +111,13 @@
     const expanded = btn.getAttribute('aria-expanded') === 'true';
     btn.setAttribute('aria-expanded', String(!expanded));
     btn.textContent = expanded ? '＋' : '－';
-    setFoldToChartHeight();
+    setFoldToAnchor();
   }
 
   function installObservers(){
-    const chart = document.querySelector('#combo-section .chart-wrap');
-    if(chart){ const ro = new ResizeObserver(()=> setFoldToChartHeight()); ro.observe(chart); }
-    window.addEventListener('resize', setFoldToChartHeight);
+    const rightBody = document.querySelector('#chart-panel .panel-body');
+    if(rightBody){ const ro = new ResizeObserver(()=> setFoldToAnchor()); ro.observe(rightBody); }
+    window.addEventListener('resize', setFoldToAnchor);
   }
 
   async function updatePanel(){
@@ -125,7 +126,7 @@
     const upWrap = document.getElementById('icp-up-wrap');
     const downWrap = document.getElementById('icp-down-wrap');
 
-    if(!me){ if(upWrap) upWrap.innerHTML=''; if(downWrap) downWrap.innerHTML=''; setFoldToChartHeight(); return; }
+    if(!me){ if(upWrap) upWrap.innerHTML=''; if(downWrap) downWrap.innerHTML=''; setFoldToAnchor(); return; }
 
     renderGroupList(upWrap, upstreamOf.get(me.code) || [], byCode);
     renderGroupList(downWrap, downstreamOf.get(me.code) || [], byCode);
@@ -138,8 +139,7 @@
     }); }
     bindClick(upWrap); bindClick(downWrap);
 
-    // 完成後進行齊頂齊底計算
-    setTimeout(setFoldToChartHeight, 0);
+    setTimeout(setFoldToAnchor, 0);
   }
 
   document.addEventListener('DOMContentLoaded', async ()=>{
