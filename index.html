@@ -17,7 +17,7 @@
     .controls { margin: 8px 16px 12px; }
     .layout { margin: 0 16px 24px; }
 
-    /* 組合圖樣式 */
+    /* 組合圖樣式（沿用） */
     .chart-section { margin: 8px 0 24px; }
     .chart-wrap { background: rgba(15,23,42,.35); border: 1px solid rgba(255,255,255,.08); border-radius: 8px; padding: 8px 8px 2px; }
     #comboChart { width: 100%; height: 380px; display: block; }
@@ -36,17 +36,23 @@
     .chip .swatch { width:12px; height:12px; border-radius:2px; display:inline-block; }
     .meta { color: #cbd5e1; font-size: 12px; }
 
-    /* 個股產業鏈面板 */
+    /* 個股產業鏈面板（兩欄版） */
     #icp-section { margin: 24px 16px; }
     #icp-section .section-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
-    #icp-grid { display:grid; grid-template-columns: 1fr 1.2fr 1fr; gap:16px; }
+    #icp-grid { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
     .icp-box { background: rgba(15,23,42,.40); border:1px solid rgba(255,255,255,.08); border-radius:8px; padding:10px; color:#e5e7eb; min-height:180px; }
-    .icp-title { font-weight:700; margin:4px 0 8px; color:#fff; }
-    .icp-card { background: rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.10); border-radius:6px; padding:8px; margin-bottom:8px; }
-    .icp-card-title { font-weight:600; color:#fff; margin-bottom:4px; font-size:13px; }
+    .icp-title { font-weight:800; letter-spacing:.5px; margin:4px 0 10px; color:#93c5fd; font-size:14px; }
+
+    /* 產業卡（群組）與個股清單視覺差異化 */
+    .icp-card { background: rgba(255,255,255,.02); border:1px dashed rgba(255,255,255,.18); border-radius:8px; padding:10px; margin-bottom:10px; transition: border-color .15s ease, box-shadow .15s ease; }
+    .icp-card:hover { border-color:#ffffff; box-shadow: 0 0 0 1px #ffffff inset; }
+    .icp-card-title { font-weight:700; color:#e2e8f0; margin-bottom:6px; font-size:13px; letter-spacing:.3px; text-transform: none; }
+
     .icp-box ul { list-style:none; margin:0; padding:0; }
-    .icp-box li { padding:3px 0; border-bottom:1px dashed rgba(255,255,255,.08); font-size:13px; }
+    .icp-box li { padding:4px 2px; border-bottom:1px dashed rgba(255,255,255,.08); font-size:13px; line-height:1.35; transition: transform .12s ease, font-weight .12s ease, color .12s ease; cursor:pointer; }
+    .icp-box li:hover { font-weight:800; transform: translateY(-1px); color:#ffffff; }
     .icp-box .code { display:inline-block; min-width:52px; color:#fff; font-weight:700; }
+
     .icp-note { font-size:12px; opacity:.8; }
     @media (max-width: 980px){ #icp-grid{ grid-template-columns: 1fr; } }
   </style>
@@ -102,20 +108,16 @@
       <div id="downHint" class="meta" style="margin-top:6px"></div>
     </section>
 
-    <!-- 新增：個股產業鏈面板（上游｜Peers｜下游） -->
+    <!-- 個股產業鏈（兩欄版：左=上游供應鏈；右=下游客戶） -->
     <section id="icp-section">
       <div class="section-head"><h2>個股產業鏈</h2><div class="icp-note">依 data.xlsx 的 Revenue / Links 工作表推論</div></div>
       <div id="icp-grid">
         <aside class="icp-box">
-          <div class="icp-title">上游產業相關個股</div>
+          <div class="icp-title">上游供應鏈</div>
           <div id="icp-up-wrap"></div>
         </aside>
-        <div class="icp-box">
-          <div class="icp-title" id="icp-center-title">（請輸入個股並查詢）</div>
-          <ul id="icp-center-peers"></ul>
-        </div>
         <aside class="icp-box">
-          <div class="icp-title">下游產業相關個股</div>
+          <div class="icp-title">下游客戶</div>
           <div id="icp-down-wrap"></div>
         </aside>
       </div>
