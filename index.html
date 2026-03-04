@@ -35,17 +35,13 @@
     .chip .swatch { width:12px; height:12px; border-radius:2px; display:inline-block; }
     .meta { color: #cbd5e1; font-size: 12px; }
 
-    /* 個股產業鏈（兩欄 + 可摺疊） */
     #icp-section { margin: 24px 16px; }
     #icp-section .section-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
 
     #icp-fold-wrap { position: relative; }
     #icp-scroll { overflow: hidden; transition: max-height .25s ease, margin-top .25s ease; }
     #icp-fade { position:absolute; left:0; right:0; height:42px; bottom:0; background:linear-gradient(to bottom, rgba(15,23,42,0), rgba(15,23,42,.95)); pointer-events:none; display:none; }
-
-    /* 2) 加號：無框、無圓角、粗體字 */
-    #icp-expander { position:absolute; left:50%; transform:translateX(-50%);
-      font-size:22px; font-weight:900; color:#fff; background:transparent; border:none; padding:0; cursor:pointer; z-index:10; user-select:none; }
+    #icp-expander { position:absolute; left:50%; transform:translateX(-50%); font-size:22px; font-weight:900; color:#fff; background:transparent; border:none; padding:0; cursor:pointer; z-index:10; user-select:none; }
 
     #icp-grid { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
     .icp-box { background: rgba(15,23,42,.40); border:1px solid rgba(255,255,255,.08); border-radius:8px; padding:10px; color:#e5e7eb; min-height:180px; }

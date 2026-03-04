@@ -1,9 +1,10 @@
 
-/* industry-chain-panel.js (foldable v4)
- * - 左欄高度與右側「營收走勢」上下對齊：
- *    · 折疊時：scroll.maxHeight = chart.height；scroll.marginTop = chart.top - wrap.top（>=0）
- *    · 展開時：scroll.maxHeight = scroll.scrollHeight；scroll.marginTop 維持對齊
- * - 「＋ / －」按鈕：改為無邊框、無圓圈、粗體字元，位置仍與圖表底部齊平。
+/* industry-chain-panel.js (foldable v5)
+ * 強化：左側清單「同頂同底」絕對對齊右側 chart-wrap（含邊框）
+ * 作法：
+ *   1) 以 #icp-fold-wrap 為坐標系，計算 chart-wrap 的 top/bottom → 對應成 scroll.marginTop 與 wrap 的 targetHeight
+ *   2) 折疊：scroll.maxHeight = targetHeight - marginTop；展開：scroll.maxHeight = scroll.scrollHeight
+ *   3) 「＋/－」無圓圈粗體，垂直中心對齊 chart-wrap 的底緣
  */
 (function(){
   const $ = (s)=> document.querySelector(s);
@@ -80,25 +81,27 @@
     const chart = document.querySelector('#combo-section .chart-wrap');
     if(!wrap || !scroll || !btn || !chart) return;
 
-    const chartRect = chart.getBoundingClientRect();
     const wrapRect  = wrap.getBoundingClientRect();
+    const chartRect = chart.getBoundingClientRect();
     const isExpanded = btn.getAttribute('aria-expanded') === 'true';
 
-    // Top 對齊圖表 top
-    const offsetTop = Math.max(0, Math.round(chartRect.top - wrapRect.top));
-    scroll.style.marginTop = offsetTop + 'px';
+    // 目標可視高度 = chart 底 - chart 頂（含邊框）
+    const targetTop    = Math.round(chartRect.top    - wrapRect.top);
+    const targetBottom = Math.round(chartRect.bottom - wrapRect.top);
+    const targetHeight = Math.max(0, targetBottom - targetTop);
 
-    // 高度等於圖表高度（折疊），展開用實際高度
+    // 同頂：把 scroll 往下推 targetTop；同底：折疊時限制高度為 targetHeight
+    scroll.style.marginTop = (targetTop < 0 ? 0 : targetTop) + 'px';
     if(!isExpanded){
-      scroll.style.maxHeight = Math.max(0, Math.round(chartRect.height)) + 'px';
+      scroll.style.maxHeight = targetHeight + 'px';
       if(fade) fade.style.display = 'block';
     }else{
       scroll.style.maxHeight = scroll.scrollHeight + 'px';
       if(fade) fade.style.display = 'none';
     }
 
-    // 「＋ / －」按鈕與圖表底對齊（中心）
-    const top = Math.round(chartRect.bottom - wrapRect.top - (btn.offsetHeight/2));
+    // 「＋ / －」加號：對齊 chart 底的垂直中心
+    const top = Math.round(targetBottom - (btn.offsetHeight/2));
     btn.style.top = (top < 0 ? 0 : top) + 'px';
   }
 
@@ -135,19 +138,15 @@
     }); }
     bindClick(upWrap); bindClick(downWrap);
 
+    // 完成後進行齊頂齊底計算
     setTimeout(setFoldToChartHeight, 0);
   }
 
   document.addEventListener('DOMContentLoaded', async ()=>{
     try{ await loadAll(); }catch(e){ console.error(e); }
-
-    const btn = document.getElementById('icp-expander');
-    if(btn){ btn.addEventListener('click', toggleFold); }
-
-    const run = document.getElementById('runBtn');
-    if(run){ run.addEventListener('click', ()=> setTimeout(updatePanel, 0)); }
+    const btn = document.getElementById('icp-expander'); if(btn){ btn.addEventListener('click', toggleFold); }
+    const run = document.getElementById('runBtn'); if(run){ run.addEventListener('click', ()=> setTimeout(updatePanel, 0)); }
     setTimeout(updatePanel, 0);
-
     installObservers();
   });
 })();
