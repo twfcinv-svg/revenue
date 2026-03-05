@@ -1,10 +1,11 @@
 
-/* industry-chain-panel.js (foldable v5)
- * 強化：左側清單「同頂同底」絕對對齊右側 chart-wrap（含邊框）
+/* industry-chain-panel.js (v7, minimal-change align)
+ * 目的：只修正「個股產業鏈」與「營收走勢」兩個資料框框上下對齊；其餘結構/樣式完全不動。
  * 作法：
- *   1) 以 #icp-fold-wrap 為坐標系，計算 chart-wrap 的 top/bottom → 對應成 scroll.marginTop 與 wrap 的 targetHeight
- *   2) 折疊：scroll.maxHeight = targetHeight - marginTop；展開：scroll.maxHeight = scroll.scrollHeight
- *   3) 「＋/－」無圓圈粗體，垂直中心對齊 chart-wrap 的底緣
+ *   Top 對齊：以 #combo-section 的 .section-head 底線(bounding.bottom) 當作右側內容起點
+ *   Bottom 對齊：以 #combo-section 的 .chart-wrap 底線(bounding.bottom) 當作右側內容終點
+ *   左側 #icp-scroll 依上述 two-anchors 設定 margin-top 與 max-height
+ *   「＋/－」按鈕垂直中心對齊右側 bottom anchor
  */
 (function(){
   const $ = (s)=> document.querySelector(s);
@@ -73,24 +74,26 @@
 
   function findStock(byCode, rows, kw){ const k=norm(kw); return k? (byCode.get(k) || rows.find(r=>r.name===k) || null) : null; }
 
-  function setFoldToChartHeight(){
-    const wrap = document.getElementById('icp-fold-wrap');
-    const scroll = document.getElementById('icp-scroll');
-    const btn = document.getElementById('icp-expander');
-    const fade = document.getElementById('icp-fade');
+  // ---- 對齊函式（僅計算、設定左側 scroll 與加號位置；不改任何其他結構/樣式） ----
+  function setFoldToComboAnchors(){
+    const scroll = $('#icp-scroll');
+    const btn = $('#icp-expander');
+    const fade = $('#icp-fade');
+    const wrap = $('#icp-fold-wrap');
+    const secHead = document.querySelector('#combo-section .section-head');
     const chart = document.querySelector('#combo-section .chart-wrap');
-    if(!wrap || !scroll || !btn || !chart) return;
+    if(!scroll || !btn || !wrap || !secHead || !chart) return;
 
-    const wrapRect  = wrap.getBoundingClientRect();
-    const chartRect = chart.getBoundingClientRect();
+    const wrapRect = wrap.getBoundingClientRect();
+    const headRect = secHead.getBoundingClientRect();
+    const chartRect= chart.getBoundingClientRect();
     const isExpanded = btn.getAttribute('aria-expanded') === 'true';
 
-    // 目標可視高度 = chart 底 - chart 頂（含邊框）
-    const targetTop    = Math.round(chartRect.top    - wrapRect.top);
+    // 右側內容的「起點」= section-head 底線；「終點」= chart-wrap 底線
+    const targetTop    = Math.round(headRect.bottom - wrapRect.top);
     const targetBottom = Math.round(chartRect.bottom - wrapRect.top);
     const targetHeight = Math.max(0, targetBottom - targetTop);
 
-    // 同頂：把 scroll 往下推 targetTop；同底：折疊時限制高度為 targetHeight
     scroll.style.marginTop = (targetTop < 0 ? 0 : targetTop) + 'px';
     if(!isExpanded){
       scroll.style.maxHeight = targetHeight + 'px';
@@ -100,7 +103,7 @@
       if(fade) fade.style.display = 'none';
     }
 
-    // 「＋ / －」加號：對齊 chart 底的垂直中心
+    // 「＋ / －」置於右側 bottom anchor 的垂直中心
     const top = Math.round(targetBottom - (btn.offsetHeight/2));
     btn.style.top = (top < 0 ? 0 : top) + 'px';
   }
@@ -110,13 +113,15 @@
     const expanded = btn.getAttribute('aria-expanded') === 'true';
     btn.setAttribute('aria-expanded', String(!expanded));
     btn.textContent = expanded ? '＋' : '－';
-    setFoldToChartHeight();
+    setFoldToComboAnchors();
   }
 
   function installObservers(){
-    const chart = document.querySelector('#combo-section .chart-wrap');
-    if(chart){ const ro = new ResizeObserver(()=> setFoldToChartHeight()); ro.observe(chart); }
-    window.addEventListener('resize', setFoldToChartHeight);
+    const secHead = document.querySelector('#combo-section .section-head');
+    const chart   = document.querySelector('#combo-section .chart-wrap');
+    if(secHead){ const ro1 = new ResizeObserver(()=> setFoldToComboAnchors()); ro1.observe(secHead); }
+    if(chart){   const ro2 = new ResizeObserver(()=> setFoldToComboAnchors()); ro2.observe(chart); }
+    window.addEventListener('resize', setFoldToComboAnchors);
   }
 
   async function updatePanel(){
@@ -125,7 +130,7 @@
     const upWrap = document.getElementById('icp-up-wrap');
     const downWrap = document.getElementById('icp-down-wrap');
 
-    if(!me){ if(upWrap) upWrap.innerHTML=''; if(downWrap) downWrap.innerHTML=''; setFoldToChartHeight(); return; }
+    if(!me){ if(upWrap) upWrap.innerHTML=''; if(downWrap) downWrap.innerHTML=''; setFoldToComboAnchors(); return; }
 
     renderGroupList(upWrap, upstreamOf.get(me.code) || [], byCode);
     renderGroupList(downWrap, downstreamOf.get(me.code) || [], byCode);
@@ -138,8 +143,7 @@
     }); }
     bindClick(upWrap); bindClick(downWrap);
 
-    // 完成後進行齊頂齊底計算
-    setTimeout(setFoldToChartHeight, 0);
+    setTimeout(setFoldToComboAnchors, 0);
   }
 
   document.addEventListener('DOMContentLoaded', async ()=>{
