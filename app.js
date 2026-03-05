@@ -1,10 +1,10 @@
-/* app.js — v3.11
- * Patch: 強化群組標題在極窄情況（特別是右下角）仍不會被裁掉：
- *  - header clipPath 使用 userSpaceOnUse；
- *  - 單行→兩行、名稱逐字省略、最小 5px；
- *  - 最後保險：若仍超寬，將「平均：xx%」改為僅顯示數值（xx%），仍確保平均值不消失；
- *  - 若還是超寬，使用 textLength + lengthAdjust=spacingAndGlyphs 壓縮到可視寬度內；
- * 其他維持 v3.10（個股最小 3px、不外溢；類股面積 RANK 模式）。
+
+/* app.js — v3.12 (patch)
+ * 變更點：
+ *  1) Treemap 「不漏檔」：即便該月沒有數值（null/空），也會畫出個股小格，顯示「—」，顏色採中性深色；
+ *     - 分組平均值 avg 僅用「有數值」的個股計算；全部皆無數值時，avg 設為 null（顯示中性色）。
+ *     - 面積計算採柔性底：對於無數值者，以群組最小值作基準給予 EPS 面積，確保可見。
+ *  2) 其餘維持 v3.11（群組標題、個股標籤等）。
  */
 
 const URL_VER = new URLSearchParams(location.search).get('v') || Date.now();
@@ -177,7 +177,7 @@ const LabelFit = {
   fitBlock(textEl,w,h){ const p=this.dynPadding(w,h); const targetW=Math.max(1,w-p*2), targetH=Math.max(1,h-p*2); const code=textEl.dataset.code||''; const name=textEl.dataset.name||''; const pct=textEl.dataset.pct||''; const layouts=[ ()=>[`${code}${name?(' '+name):''}`, pct], ()=>[code, pct], ()=>[pct] ]; const k=0.12; const areaFont=Math.sqrt(targetW*targetH)*k; const logicalMax=Math.min(this.maxFont, Math.floor(targetH*0.5)); for(const L of layouts){ while(textEl.firstChild) textEl.removeChild(textEl.firstChild); L().forEach(s=>{ const t=document.createElementNS('http://www.w3.org/2000/svg','tspan'); t.textContent=s; textEl.appendChild(t); }); let f=Math.max(this.minFontHard, Math.min(logicalMax, Math.floor(areaFont))); textEl.setAttribute('font-size',f); this.centerText(textEl,w,h,p); this.ellipsizeNameToWidth(textEl, targetW); let guard=0; while(guard++<60){ const bb=textEl.getBBox(); const sW=targetW/Math.max(1,bb.width), sH=targetH/Math.max(1,bb.height); const s=Math.min(sW,sH,1); const next=Math.max(this.minFontHard, Math.floor(f*s)); if(next<f){ f=next; textEl.setAttribute('font-size',f); this.centerText(textEl,w,h,p); continue; } if(sW<1 && f<=this.minFontHard){ this.ellipsizeNameToWidth(textEl, targetW); } break; } const tsp=textEl.querySelectorAll('tspan'); const n=Math.max(1,tsp.length); const offsetEm=-((n-1)*this.lineHeight/2); tsp.forEach((t,i)=>{ t.setAttribute('x', textEl.getAttribute('x')); t.setAttribute('dy', i===0?`${offsetEm}em`:`${this.lineHeight}em`); }); const box=textEl.getBBox(); if(box.width<=targetW+0.1 && box.height<=targetH+0.1){ textEl.removeAttribute('display'); return; } } textEl.setAttribute('display','none'); }
 };
 
-// ========= 群組標題（增強：最終保險數值縮短 + textLength 壓縮） =========
+// ========= 群組標題（保留 v3.11 增強） =========
 const GroupTitleFit = {
   minFont: 5,
   lineHeight: 1.12,
@@ -187,18 +187,11 @@ const GroupTitleFit = {
   mountOneLine(text,d){ while(text.firstChild) text.removeChild(text.firstChild); const tName=document.createElementNS('http://www.w3.org/2000/svg','tspan'); tName.textContent=d.data.name||''; const tSep=document.createElementNS('http://www.w3.org/2000/svg','tspan'); tSep.textContent='  '; const tAvg=document.createElementNS('http://www.w3.org/2000/svg','tspan'); tAvg.textContent=`平均：${displayPct(d.data.avg)}`; text.appendChild(tName); text.appendChild(tSep); text.appendChild(tAvg); text.dataset.mode='one'; },
   mountTwoLines(text,d){ while(text.firstChild) text.removeChild(text.firstChild); const tName=document.createElementNS('http://www.w3.org/2000/svg','tspan'); tName.textContent=d.data.name||''; const tAvg=document.createElementNS('http://www.w3.org/2000/svg','tspan'); tAvg.textContent=`平均：${displayPct(d.data.avg)}`; text.appendChild(tName); text.appendChild(tAvg); text.dataset.mode='two'; },
   ellipsizeName(text,maxW){ const tName=text.querySelector('tspan'); if(!tName) return false; let nm=tName.textContent||''; if(nm.length===0) return false; tName.textContent=nm.slice(0,-1)+'…'; return true; },
-  shortenAvg(text){ // 把「平均：+12.3%」縮成「+12.3%」
-    const tsp = text.querySelectorAll('tspan');
-    if (tsp.length===0) return; // 單行時平均在第3個；兩行時在第2個
-    const last = tsp[tsp.length-1];
-    const m = String(last.textContent||'').match(/([+\-]?[0-9]+(?:\.[0-9])?%)/);
-    if (m) last.textContent = m[1];
-  },
+  shortenAvg(text){ const tsp = text.querySelectorAll('tspan'); if (tsp.length===0) return; const last = tsp[tsp.length-1]; const m = String(last.textContent||'').match(/([+\-]?[0-9]+(?:\.[0-9])?%)/); if (m) last.textContent = m[1]; },
   fit(text, d, headerH){
-    const wMaxFull = Math.max(0, d.x1-d.x0) - this.inset*2 - 2; // 再扣 2px 邊框
+    const wMaxFull = Math.max(0, d.x1-d.x0) - this.inset*2 - 2;
     const hMax = Math.max(0, headerH)  - this.inset*2 - 1;
     if (wMaxFull<=0 || hMax<=0) return;
-
     text.setAttribute('text-anchor','start');
     text.setAttribute('dominant-baseline','middle');
     text.setAttribute('x', d.x0 + this.inset + 4);
@@ -206,10 +199,8 @@ const GroupTitleFit = {
     text.removeAttribute('lengthAdjust');
     text.removeAttribute('textLength');
     text.setAttribute('clip-path', this.ensureHeaderClip(text.ownerSVGElement, text.parentNode, d, headerH));
-
     this.mountOneLine(text,d);
     let f=Math.max(this.minFont, Math.floor(Math.min(Math.sqrt(Math.max(1,wMaxFull*hMax))*this.k, hMax*0.95)));
-
     let guard=0;
     const loop=()=>{
       if(++guard>160) return;
@@ -229,21 +220,15 @@ const GroupTitleFit = {
           if (this.ellipsizeName(text, wMaxFull)) return loop();
         }
       }
-      // 成功或達到最小
       return;
     };
-
     loop();
-
-    // Final clamp #1：若仍超寬，先把「平均：」縮成純數值
     let bb = text.getBBox();
     if (bb.width > wMaxFull + 0.1) {
       this.shortenAvg(text);
       text.setAttribute('font-size', Math.max(this.minFont, parseInt(text.getAttribute('font-size')||this.minFont) - 1));
       bb = text.getBBox();
     }
-
-    // Final clamp #2：若仍超寬，使用 textLength 強制壓進寬度（只限 header 內部，視覺影響有限）
     if (bb.width > wMaxFull + 0.1) {
       text.setAttribute('lengthAdjust','spacingAndGlyphs');
       text.setAttribute('textLength', Math.max(1, Math.floor(wMaxFull)));
@@ -261,12 +246,16 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
     const rel=normText(e['關係類型']||'未分類');
     const key=normCode(e[codeField]);
     const r=byCode.get(key);
-    if(!r) continue;
-    const v=getMetricValue(r,month,metric);
-    if(v==null) continue;
-    if(!groups.has(rel)) groups.set(rel,[]);
+    if(!r) { // 即便找不到名稱，也畫出代碼節點（名稱留空）
+      const vNull = null;
+      if(!groups.has(rel)) groups.set(rel,[]);
+      groups.get(rel).push({ code:key, name:'', raw:vNull });
+      continue;
+    }
+    const v=getMetricValue(r,month,metric); // 允許 null
     const codeVal = r['個股'] ?? r['代號'] ?? r['股票代碼'] ?? r['股票代號'] ?? r['公司代號'] ?? r['證券代號'];
     const nameVal = r['名稱'] ?? r['公司名稱'] ?? r['證券名稱'];
+    if(!groups.has(rel)) groups.set(rel,[]);
     groups.get(rel).push({ code:codeVal, name:nameVal, raw:v });
   }
 
@@ -279,9 +268,12 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
   const EPS = 0.01;
   const groupSummaries = [];
   for (const [rel, list] of kept){
-    const avg = d3.mean(list, d=>d.raw);
-    const minLeafRaw = d3.min(list, d=>d.raw);
-    const baseValues = list.map(s => ({ s, base: Math.max(EPS, (s.raw - minLeafRaw + EPS)) }));
+    const avg = d3.mean(list, d=> Number.isFinite(d.raw)? d.raw : null);
+    const minLeafRaw = d3.min(list.map(d=> Number.isFinite(d.raw)? d.raw : 0));
+    const baseValues = list.map(s => {
+      const valNum = Number.isFinite(s.raw)? s.raw : minLeafRaw; // 無值者給最小值做基準
+      return { s, base: Math.max(EPS, (valNum - minLeafRaw + EPS)) };
+    });
     const baseSum = d3.sum(baseValues, d=>d.base) || EPS;
     groupSummaries.push({ rel, list, avg, baseValues, baseSum });
   }
@@ -289,14 +281,13 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
   // 群組面積權重：RANK 柔性強調 或 AVG 等比
   let groupWeights = new Map();
   if (GROUP_WEIGHT_MODE === 'AVG') {
-    const minAvg = d3.min(groupSummaries, d=>d.avg);
-    for (const g of groupSummaries){ groupWeights.set(g.rel, Math.max(EPS, (g.avg - minAvg + EPS))); }
+    const minAvg = d3.min(groupSummaries.map(d=> Number.isFinite(d.avg)? d.avg : 0));
+    for (const g of groupSummaries){ const a = Number.isFinite(g.avg)? g.avg : minAvg; groupWeights.set(g.rel, Math.max(EPS, (a - minAvg + EPS))); }
   } else {
-    const sorted = [...groupSummaries].sort((a,b)=> a.avg - b.avg);
+    const sorted = [...groupSummaries].sort((a,b)=> (Number.isFinite(a.avg)?a.avg:-Infinity) - (Number.isFinite(b.avg)?b.avg:-Infinity));
     const n = Math.max(1, sorted.length-1);
     sorted.forEach((g, i)=>{
-      const t = i / n;
-      const w = RANK_WEIGHT_MIN + t * (RANK_WEIGHT_MAX - RANK_WEIGHT_MIN);
+      const t = i / n; const w = RANK_WEIGHT_MIN + t * (RANK_WEIGHT_MAX - RANK_WEIGHT_MIN);
       groupWeights.set(g.rel, w);
     });
   }
