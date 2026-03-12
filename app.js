@@ -1,10 +1,10 @@
-
-/* app.js — v3.12 (patch)
- * 變更點：
- *  1) Treemap 「不漏檔」：即便該月沒有數值（null/空），也會畫出個股小格，顯示「—」，顏色採中性深色；
- *     - 分組平均值 avg 僅用「有數值」的個股計算；全部皆無數值時，avg 設為 null（顯示中性色）。
- *     - 面積計算採柔性底：對於無數值者，以群組最小值作基準給予 EPS 面積，確保可見。
- *  2) 其餘維持 v3.11（群組標題、個股標籤等）。
+/* app.js — v3.12 (patch, US filter)
+ * 變更點（本版新增）：
+ *  A) Treemap 直接「不顯示」美股（代碼以 .US 結尾）
+ *     - 來源在 Links 的上/下游名單若為 .US，將被 treemap 過濾，不建立節點。
+ *  B) 其它需求照舊：
+ *     - getMetricValue 對 .US 一律回傳 null（任何位置的 MoM/YoY 皆顯示為『—』）。
+ *     - 既有「不漏檔」與面積計算、群組標題等行為維持不變。
  */
 
 const URL_VER = new URLSearchParams(location.search).get('v') || Date.now();
@@ -35,6 +35,7 @@ function normCode(s){ return toHalfWidth(z(s)).replace(/[\u200B-\u200D\uFEFF]/g,
 function displayPct(v){ if(v==null||!isFinite(v)) return '—'; const s=v.toFixed(1)+'%'; return v>0?('+'+s):s; }
 function colorFor(v, mode){ if(v==null||!isFinite(v)) return '#0f172a'; const t=Math.min(1,Math.abs(v)/80); const alpha=0.25+0.35*t; const good=(mode==='greenPositive'); const pos=good?'16,185,129':'239,68,68'; const neg=good?'239,68,68':'16,185,129'; const rgb=(v>=0)?pos:neg; return `rgba(${rgb},${alpha})`; }
 function safe(s){ return z(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c])); }
+function isUSCode(code){ return /\.US$/i.test(String(code||'').trim()); }
 
 window.addEventListener('DOMContentLoaded', async()=>{
   try{ await loadWorkbook(); initControls(); setupDownloadButton(); }
@@ -102,7 +103,15 @@ function initControls(){
 }
 
 function getMetricValue(row, month, metric){
-  if(!row || !month || !metric) return null; const col = (COL_MAP[month] || {})[metric];
+  if(!row || !month || !metric) return null;
+  // 若為 .US 代碼 → 一律不顯示 MoM/YoY
+  const codeOfRow = normCode(
+    row['個股'] || row['代號'] || row['股票代碼'] ||
+    row['股票代號'] || row['公司代號'] || row['證券代號'] || ''
+  );
+  if (isUSCode(codeOfRow)) return null;
+
+  const col = (COL_MAP[month] || {})[metric];
   if(!col) return null; let v = row[col]; if(v==null || v==='') return null;
   if(typeof v === 'string') v = v.replace('%','').replace('％','').trim(); v = Number(v);
   return Number.isFinite(v) ? v : null;
@@ -244,12 +253,15 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
   const groups=new Map();
   for(const e of edges){
     const rel=normText(e['關係類型']||'未分類');
-    const key=normCode(e[codeField]);
-    const r=byCode.get(key);
-    if(!r) { // 即便找不到名稱，也畫出代碼節點（名稱留空）
+    const keyRaw=normCode(e[codeField]);
+    // 🔥 美股 (.US) 直接不參與 treemap
+    if (isUSCode(keyRaw)) continue;
+
+    const r=byCode.get(keyRaw);
+    if(!r) {
       const vNull = null;
       if(!groups.has(rel)) groups.set(rel,[]);
-      groups.get(rel).push({ code:key, name:'', raw:vNull });
+      groups.get(rel).push({ code:keyRaw, name:'', raw:vNull });
       continue;
     }
     const v=getMetricValue(r,month,metric); // 允許 null
