@@ -1,35 +1,25 @@
-
-/* combo-chart.js  個股「營收走勢」：合併營收（長條，固定紅）＋ 月增率/年增率（雙折線）
+/* combo-chart.js (v2)  個股「營收走勢」
  * 變更：
- *  - Tooltip 以「模式 A（跟著游標漂浮）」顯示，並固定在滑鼠旁邊，避免跑到左下角。
- *  - Tooltip 掛在圖表容器 .chart-wrap（position:relative）下方，以絕對定位計算，不受全頁 CSS 影響。
+ *  - X 軸僅顯示 3 個座標：最新月份、去年同期、前年同期（若資料不足，顯示能對得上的）。
+ *  - Tooltip 與既有樣式維持。
  */
 (function(){
   const $ = (sel) => document.querySelector(sel);
   const $$closest = (el, sel) => (el && el.closest) ? el.closest(sel) : null;
 
-  // 建立 tooltip host 與 tooltip 本體（避免被全站 CSS 影響）
+  // 建立 tooltip host 與 tooltip 本體
   const svgNode = document.getElementById('comboChart');
   const chartWrap = svgNode ? ($$closest(svgNode, '.chart-wrap') || document.body) : document.body;
   if(chartWrap && getComputedStyle(chartWrap).position === 'static'){
-    chartWrap.style.position = 'relative'; // 作為定位基準
+    chartWrap.style.position = 'relative';
   }
   const tooltip = document.createElement('div');
   tooltip.className = 'combo-tooltip';
   Object.assign(tooltip.style, {
-    position: 'absolute',
-    pointerEvents: 'none',
-    display: 'none',
-    padding: '8px 10px',
-    fontSize: '12px',
-    lineHeight: '1.4',
-    color: '#fff',
-    background: 'rgba(0,0,0,0.82)',
-    border: '1px solid rgba(255,255,255,0.18)',
-    borderRadius: '8px',
-    boxShadow: '0 4px 14px rgba(0,0,0,.35)',
-    zIndex: 1000,
-    whiteSpace: 'nowrap'
+    position: 'absolute', pointerEvents: 'none', display: 'none', padding: '8px 10px',
+    fontSize: '12px', lineHeight: '1.4', color: '#fff', background: 'rgba(0,0,0,0.82)',
+    border: '1px solid rgba(255,255,255,0.18)', borderRadius: '8px', boxShadow: '0 4px 14px rgba(0,0,0,.35)',
+    zIndex: 1000, whiteSpace: 'nowrap'
   });
   chartWrap.appendChild(tooltip);
 
@@ -37,6 +27,14 @@
   function fmtYM(ym){ return ym.slice(0,4)+'-'+ym.slice(4,6); }
   function fmtPct(v){ return (v==null)?'': d3.format('+.0f')(v)+'%'; }
   function fmtMoney(val){ if(val==null) return ''; const si=d3.format('.2s'); return si(val*1000).replace('G','B'); }
+
+  // yyyyMM 加減月數（delta 可為負）
+  function shiftYM(ym, delta){
+    let y = +ym.slice(0,4), m = +ym.slice(4,6);
+    let total = y*12 + (m-1) + delta;
+    let y2 = Math.floor(total/12); let m2 = total%12 + 1;
+    return String(y2).padStart(4,'0') + String(m2).padStart(2,'0');
+  }
 
   const state = { loaded:false, rows:[], columns:null, months:null, indexByCode:new Map(), indexByName:new Map() };
 
@@ -111,15 +109,13 @@
   function findStock(keyword){ const k = norm(keyword); if(!k) return null; return state.indexByCode.get(k) || state.indexByName.get(k) || null; }
 
   function placeTooltipNearMouse(evt){
-    // 以 chartWrap 為基準，讓 tooltip 貼近游標右上方；並避免超出容器
     const rect = chartWrap.getBoundingClientRect();
     const mouseX = evt.clientX - rect.left;
     const mouseY = evt.clientY - rect.top;
 
-    const offsetX = 14;  // 右偏移
-    const offsetY = 12;  // 上偏移（往上顯示）
+    const offsetX = 14;
+    const offsetY = 12;
 
-    // 先顯示使其可量測尺寸
     tooltip.style.display = 'block';
     tooltip.style.visibility = 'hidden';
 
@@ -127,17 +123,10 @@
     const th = tooltip.offsetHeight || 80;
 
     let left = mouseX + offsetX;
-    let top  = mouseY - th - offsetY; // 預設在游標上方
+    let top  = mouseY - th - offsetY;
 
-    // 右界限
-    if(left + tw > rect.width - 6){
-      left = mouseX - tw - 8; // 改放游標左側
-    }
-    // 上界限
-    if(top < 6){
-      top = mouseY + 12; // 改放游標下方
-    }
-    // 左/下界限微調
+    if(left + tw > rect.width - 6){ left = mouseX - tw - 8; }
+    if(top < 6){ top = mouseY + 12; }
     if(left < 6) left = 6;
     if(top  > rect.height - th - 6) top = rect.height - th - 6;
 
@@ -170,6 +159,7 @@
       return;
     }
 
+    // Domain
     const months = data.map(d=>d.ym);
     const x = d3.scaleBand().domain(months).range([0,w]).padding(0.15);
 
@@ -179,7 +169,14 @@
     const maxPct = d3.max(data, d=>Math.max(Math.abs(d.mom||0), Math.abs(d.yoy||0))) || 10;
     const yL = d3.scaleLinear().domain([-maxPct*1.2, maxPct*1.2]).nice().range([h,0]);
 
-    const xAxis = (sel)=> sel.call(d3.axisBottom(x).tickFormat(ym=>fmtYM(ym)).tickSizeOuter(0));
+    // ✅ 只顯示三個座標：最新、去年同期、前年同期
+    const latest = months[months.length-1];
+    const ticksWanted = [ latest, shiftYM(latest, -12), shiftYM(latest, -24) ]
+                          .filter(v => months.indexOf(v) !== -1);
+
+    const xAxis = (sel)=> sel.call(
+      d3.axisBottom(x).tickValues(ticksWanted).tickFormat(ym=>fmtYM(ym)).tickSizeOuter(0)
+    );
     const yAxisL = (sel)=> sel.call(d3.axisLeft(yL).ticks(6).tickFormat(d=>d+'%'));
     const yAxisR = (sel)=> sel.call(d3.axisRight(yR).ticks(6).tickFormat(fmtMoney));
 
@@ -213,7 +210,7 @@
       .attr('height', d=>h - yR(d.amount||0));
     bars.exit().remove();
 
-    // 重新綁定滑鼠事件（合併後 selection）
+    // 滑鼠事件
     root.selectAll('rect.bar')
       .on('mousemove', (evt, d)=>{
         const ym = fmtYM(d.ym);

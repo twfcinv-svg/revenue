@@ -1,16 +1,15 @@
-
-/* industry-chain-panel.js (v9)
- * 強化：
- *  - 對齊「資料外框」視覺頂/底：以右側 #combo-section 的 section-head 底線 與 (chart-wrap、legend-row) 底線
- *  - 額外校正左側第一個 .icp-box 與 scroll 之內距，讓「第一個外框的上邊」貼齊 top anchor
- *  - 多次 RAF 重算以避免字型/重排造成的 1~2px 漂移
- *  - Links.關係類型 分群（延續 v8）
+/* industry-chain-panel.js (v9.1)
+ * 修正：
+ *  - 🐞「點一次開兩個同頁」：避免重複綁定 click，並統一使用委派處理；每個容器只會綁一次。
+ *  - 🚫 .US 代碼：出現在清單中時不可點擊（不開外部連結）。
+ *  - 其餘維持 v9：右側錨點對齊、多次 RAF 校正、Links.關係類型分群。
  */
 (function(){
-  const $ = (s)=> document.querySelector(s);
-  const $$= (s)=> Array.from(document.querySelectorAll(s));
+  const $  = (s)=> document.querySelector(s);
+  const $$ = (s)=> Array.from(document.querySelectorAll(s));
   const encode = (s)=> encodeURIComponent(s);
   const RAF = (fn)=> requestAnimationFrame(()=> requestAnimationFrame(fn));
+  const isUS = (code)=> /\.US$/i.test(String(code||'').trim());
 
   function norm(s){ return String(s==null?'':s).trim(); }
   function detectCol(headers, patterns){ for(const p of patterns){ for(const h of headers){ if(p.test(h)) return h; } } return null; }
@@ -87,22 +86,18 @@
     const chartRect = chart.getBoundingClientRect();
     const legendRect= legend ? legend.getBoundingClientRect() : null;
 
-    // 右側可視內容上下錨點
     const topAnchor    = Math.round(headRect.bottom - wrapRect.top);
     const bottomAnchor = Math.round(Math.max(chartRect.bottom, legendRect?legendRect.bottom:-Infinity) - wrapRect.top);
 
-    // 校正：左側第一個 .icp-box 與 scroll 的內距（確保「外框邊」貼齊）
     const firstBox = scroll.querySelector('.icp-box');
     let innerTopOffset = 0;
     if(firstBox){ const fb = firstBox.getBoundingClientRect(); const sc = scroll.getBoundingClientRect(); innerTopOffset = Math.round(fb.top - sc.top); }
 
     const isExpanded = btn.getAttribute('aria-expanded') === 'true';
 
-    // 第一個外框頂部 = topAnchor
     const marginTop = Math.max(0, topAnchor - innerTopOffset);
     scroll.style.marginTop = marginTop + 'px';
 
-    // scroll 的可視高度 = bottomAnchor - 第一個外框頂部
     const targetHeight = Math.max(0, bottomAnchor - (marginTop + innerTopOffset));
     if(!isExpanded){
       scroll.style.maxHeight = targetHeight + 'px'; if(fade) fade.style.display='block';
@@ -124,6 +119,21 @@
     window.addEventListener('resize', ()=> RAF(setFoldToAnchors));
   }
 
+  function bindClickOnce(root){
+    if(!root) return;
+    if(root.dataset.bound === '1') return; // ✅ 防重複綁定
+    const handler = (e)=>{
+      const li = e.target.closest('.icp-stock');
+      if(!li) return;
+      const code = li.getAttribute('data-code');
+      if(!code || isUS(code)) return; // 🚫 .US 不開外部連結
+      const url='https://www.fbs.com.tw/MKT/Index?name='+encode('Ｊ線圖')+'&stock='+encode(code);
+      window.open(url, '_blank', 'noopener');
+    };
+    root.addEventListener('click', handler);
+    root.dataset.bound = '1';
+  }
+
   async function updatePanel(){
     const { revRows, byCode, linksRows } = await loadAll();
     const me = findStock(byCode, revRows, document.getElementById('stockInput')?.value || '');
@@ -138,11 +148,18 @@
     renderGroupListByPairs(upWrap, upPairs, byCode);
     renderGroupListByPairs(downWrap, downPairs, byCode);
 
-    function bindClick(root){ if(!root) return; root.addEventListener('click', (e)=>{ const li=e.target.closest('.icp-stock'); if(!li) return; const code=li.getAttribute('data-code'); if(!code) return; const url='https://www.fbs.com.tw/MKT/Index?name='+encode('Ｊ線圖')+'&stock='+encode(code); window.open(url,'_blank'); }); }
-    bindClick(upWrap); bindClick(downWrap);
+    // ✅ 只綁一次
+    bindClickOnce(upWrap);
+    bindClickOnce(downWrap);
 
     RAF(setFoldToAnchors);
   }
 
-  document.addEventListener('DOMContentLoaded', async ()=>{ try{ await loadAll(); }catch(e){ console.error(e); } const btn=$('#icp-expander'); if(btn) btn.addEventListener('click', toggleFold); const run=$('#runBtn'); if(run) run.addEventListener('click', ()=> RAF(updatePanel)); RAF(updatePanel); installObservers(); });
+  document.addEventListener('DOMContentLoaded', async ()=>{
+    try{ await loadAll(); }catch(e){ console.error(e); }
+    const btn=$('#icp-expander'); if(btn) btn.addEventListener('click', toggleFold);
+    const run=$('#runBtn'); if(run) run.addEventListener('click', ()=> RAF(updatePanel));
+    RAF(updatePanel);
+    installObservers();
+  });
 })();
