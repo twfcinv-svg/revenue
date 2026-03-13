@@ -7,6 +7,8 @@
   <script>
     const VER = new URLSearchParams(location.search).get('v') || Date.now();
     document.write('<link rel="stylesheet" href="styles.css?v='+VER+'">');
+    // ✅ 新增：載入對齊修正用 CSS（含 --icp-nudge-top / --icp-nudge-bottom）
+    document.write('<link rel="stylesheet" href="fix-align.css?v='+VER+'">');
   </script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
@@ -145,12 +147,14 @@
   </main>
 
   <script>
-    document.write('<script src="app.js?v='+VER+'"><\/script>');
-    document.write('<script src="stock-link-plugin.js?v='+VER+'"><\/script>');
-    document.write('<script src="app_query_link_B.js?v='+VER+'"><\/script>');
-    document.write('<script src="combo-chart.js?v='+VER+'"><\/script>');
-    document.write('<script src="treemap-tooltip.js?v='+VER+'"><\/script>');
-    document.write('<script src="industry-chain-panel.js?v='+VER+'"><\/script>');
+    document.write('<script src="app.js?v='+VER+'"><\/'+'script>');
+    document.write('<script src="stock-link-plugin.js?v='+VER+'"><\/'+'script>');
+    document.write('<script src="app_query_link_B.js?v='+VER+'"><\/'+'script>');
+    // ✅ 已更新的走勢圖（只顯示三個刻度）
+    document.write('<script src="combo-chart.js?v='+VER+'"><\/'+'script>');
+    document.write('<script src="treemap-tooltip.js?v='+VER+'"><\/'+'script>');
+    // ✅ 已更新的產業鏈面板（對齊 v9.2 + 防重綁 + .US 不開外連）
+    document.write('<script src="industry-chain-panel.js?v='+VER+'"><\/'+'script>');
   </script>
 </body>
 </html>
