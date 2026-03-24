@@ -1,4 +1,3 @@
-
 /* links-override-final.js */
 (function(){
   function waitLoad(){
