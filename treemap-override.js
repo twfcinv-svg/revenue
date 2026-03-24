@@ -1,21 +1,19 @@
 
-/* treemap-override.js
- * Override Treemap downstream data to use H~J (downstreamHJ)
- */
+/* treemap-override-final.js */
 (function(){
-  function safeOverride(){
-    if(!window.upstreamAC || !window.downstreamHJ){ setTimeout(safeOverride,120); return; }
+  function wait(){
+    if(!window.handleRun){ return setTimeout(wait,100); }
+    if(!window.upstreamAC || !window.downstreamHJ){ return setTimeout(wait,150); }
     const oldRun = window.handleRun;
-    if(!oldRun){ setTimeout(safeOverride,120); return; }
     window.handleRun = function(){
       const raw=document.querySelector('#stockInput').value;
-      const month=document.querySelector('#monthSelect')?.value||'';
-      const metric=document.querySelector('#metricSelect')?.value||'MoM';
+      const month=document.querySelector('#monthSelect').value;
+      const metric=document.querySelector('#metricSelect').value;
       const colorMode=document.querySelector('#colorMode')?.value||'redPositive';
-      let codeKey=raw.trim().replace(/\s+/g,'');
-      const upstreamEdges = window.upstreamAC.filter(l=>l.down===codeKey);
-      const downstreamEdges = window.downstreamHJ.filter(l=>l.up===codeKey);
-      const rowSelf = window.byCode?.get(codeKey);
+      const codeKey=raw.trim().replace(/\s+/g,'');
+      const upstreamEdges   = window.upstreamAC.filter(x=>x.down===codeKey);
+      const downstreamEdges = window.downstreamHJ.filter(x=>x.up===codeKey);
+      const rowSelf = window.byCode.get(codeKey);
       if(!rowSelf){ alert('找不到此代號/名稱'); return; }
       requestAnimationFrame(()=>{
         window.renderResultChip(rowSelf,month,metric,colorMode);
@@ -26,5 +24,5 @@
       });
     };
   }
-  safeOverride();
+  wait();
 })();
