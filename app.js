@@ -74,7 +74,7 @@ async function loadWorkbook(){
   months = Array.from(found).sort((a,b)=>b.localeCompare(a));
 
   revenueRows = XLSX.utils.sheet_to_json(wsRev,   { defval:null });
-
+  linksRows   = XLSX.utils.sheet_to_json(wsLinks, { defval:null });
 
   byCode.clear(); byName.clear();
   const sample = revenueRows[0] || {};
@@ -87,33 +87,12 @@ async function loadWorkbook(){
     if(name) byName.set(name, r);
   }
 
-  // === 新版 Links 分割解析 ===
-  const rowsLinks = XLSX.utils.sheet_to_json(wsLinks, { header: 1, defval: null });
-
-  window.upstreamAC = [];
-  window.downstreamHJ = [];
-
-  for (let i = 1; i < rowsLinks.length; i++) {
-      const r = rowsLinks[i];
-      if (!r) continue;
-
-      // A–C 上游
-      if (r[0] && r[1] && r[2]) {
-          upstreamAC.push({
-              up:   normCode(r[0]),
-              down: normCode(r[1]),
-              type: normText(r[2])
-          });
-      }
-
-      // H–J 下游
-      if (r[7] && r[8] && r[9]) {
-          downstreamHJ.push({
-              up:   normCode(r[7]),
-              down: normCode(r[8]),
-              type: normText(r[9])
-          });
-      }
+  linksByUp.clear(); linksByDown.clear();
+  for(const e of linksRows){
+    const up   = normCode(e['上游代號']);
+    const down = normCode(e['下游代號']);
+    if (up)   { if(!linksByUp.has(up))   linksByUp.set(up, []);   linksByUp.get(up).push(e); }
+    if (down) { if(!linksByDown.has(down)) linksByDown.set(down, []); linksByDown.get(down).push(e); }
   }
 }
 
@@ -169,8 +148,8 @@ function handleRun(){
     if (window.setResultChipLink) window.setResultChipLink(codeLabel, nameLabel, extra);
   }catch(_){ }
 
-  const upstreamEdges   = upstreamAC.filter(l => l.down === codeKey);
-  const downstreamEdges = downstreamHJ.filter(l => l.up === codeKey);
+  const upstreamEdges   = linksByDown.get(codeKey) || [];
+  const downstreamEdges = linksByUp.get(codeKey)   || [];
 
   requestAnimationFrame(()=>{
     renderResultChip(rowSelf, month, metric, colorMode);
@@ -274,7 +253,7 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
   const groups=new Map();
   for(const e of edges){
     const rel=normText(e['關係類型']||'未分類');
-    const keyRaw = normCode(e[codeField] || e.up || e.down);
+    const keyRaw=normCode(e[codeField]);
     // 🔥 美股 (.US) 直接不參與 treemap
     if (isUSCode(keyRaw)) continue;
 
@@ -388,11 +367,3 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
   const onResize = ()=>{ parents.select('text').each(function(d){ GroupTitleFit.fit(this, d, HEADER_H); }); };
   window.addEventListener('resize', onResize, { passive:true });
 }
-
-
-// === Auto-load links-override.js ===
-(function(){
-    const s=document.createElement('script');
-    s.src='links-override.js';
-    document.head.appendChild(s);
-})();
