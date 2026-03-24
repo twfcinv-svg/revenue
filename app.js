@@ -367,3 +367,11 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
   const onResize = ()=>{ parents.select('text').each(function(d){ GroupTitleFit.fit(this, d, HEADER_H); }); };
   window.addEventListener('resize', onResize, { passive:true });
 }
+
+
+// === Auto-load links-override.js ===
+(function(){
+    const s=document.createElement('script');
+    s.src='links-override.js';
+    document.head.appendChild(s);
+})();
