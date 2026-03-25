@@ -160,9 +160,30 @@ function handleRun(){
     renderResultChip(rowSelf, month, metric, colorMode);
     renderTreemap('upTreemap','upHint',   upstreamEdges,  '上游代號', month, metric, colorMode);
   });
-  requestAnimationFrame(()=>{
-    renderTreemap('downTreemap','downHint',downstreamEdges,'下游代號', month, metric, colorMode);
-  });
+  // ========== 下游改用 H~J，並等待 downstreamHJ 初始化 ==========
+  (function waitDownstreamReady(){
+      if (!Array.isArray(window.downstreamHJ)) {
+          console.log("等待 downstreamHJ 初始化...");
+          return setTimeout(waitDownstreamReady, 50);
+      }
+
+      // 下游 = H~J
+      let downstreamEdges = window.downstreamHJ.filter(e => e.up === codeKey);
+
+      // 排除 US
+      downstreamEdges = downstreamEdges.filter(e => !String(e.down).endsWith('.US'));
+
+      console.log("H~J 下游筆數 =", downstreamEdges.length);
+
+      requestAnimationFrame(()=>{
+          renderTreemap(
+              'downTreemap','downHint',
+              downstreamEdges,'下游代號',
+              month, metric, colorMode
+          );
+      });
+
+  })();
 }
 
 function renderResultChip(selfRow, month, metric, colorMode){
