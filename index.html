@@ -147,15 +147,24 @@
   </main>
 
 
-    app.js?v=</script>
-    stock-link-plugin.js?v=</script>
-    app_query_link_B.js?v=</script>
-    // ✅ 已更新的走勢圖（只顯示三個刻度）
-    combo-chart.js?v=</script>
-    treemap-tooltip.js?v=</script>
-    // ✅ 已更新的產業鏈面板（對齊 v9.2 + 防重綁 + .US 不開外連）
-    industry-chain-panel.js?v=</script>
-    links-override.js?v=</script>
-    treemap-override.js?v=</script>
+  <!-- 正確 Script 載入順序（不能再用 document.write） -->
+  app.js?v=</script>
+  stock-link-plugin.js?v=</script>
+  app_query_link_B.js?v=</script>
+
+  <!-- 走勢圖 -->
+  combo-chart.js?v=</script>
+
+  <!-- Treemap Tooltip -->
+  treemap-tooltip.js?v=</script>
+
+  <!-- 個股產業鏈 -->
+  <script src="industry-chain/script>
+
+  <!-- Links: A~C + H~J -->
+  links-override.js?v=</script>
+
+  <!-- Treemap 下游使用 H~J -->
+  treemap-override.js?v=</script>
 </body>
 </html>
