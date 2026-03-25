@@ -147,24 +147,14 @@
   </main>
 
 
-  <!-- 正確 Script 載入順序（不能再用 document.write） -->
-  app.js?v=</script>
-  stock-link-plugin.js?v=</script>
-  app_query_link_B.js?v=</script>
+  <script src='app.js?v='+VER></script>
+  <script src='stock-link-plugin.js?v='+VER></script>
+  <script src='app_query_link_B.js?v='+VER></script>
+  <script src='combo-chart.js?v='+VER></script>
+  <script src='treemap-tooltip.js?v='+VER></script>
+  <script src='industry-chain-panel.js?v='+VER></script>
 
-  <!-- 走勢圖 -->
-  combo-chart.js?v=</script>
-
-  <!-- Treemap Tooltip -->
-  treemap-tooltip.js?v=</script>
-
-  <!-- 個股產業鏈 -->
-  <script src="industry-chain/script>
-
-  <!-- Links: A~C + H~J -->
-  links-override.js?v=</script>
-
-  <!-- Treemap 下游使用 H~J -->
-  treemap-override.js?v=</script>
+  <script src='links-override.js?v='+VER></script>
+  <script src='treemap-override.js?v='+VER></script>
 </body>
 </html>
