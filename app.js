@@ -87,33 +87,55 @@ async function loadWorkbook(){
     if(name) byName.set(name, r);
   }
 
-  linksByUp.clear(); linksByDown.clear();
-  for(const e of linksRows){
-    const up   = normCode(e['上游代號']);
-    const down = normCode(e['下游代號']);
-    if (up)   { if(!linksByUp.has(up))   linksByUp.set(up, []);   linksByUp.get(up).push(e); }
-    if (down) { if(!linksByDown.has(down)) linksByDown.set(down, []); linksByDown.get(down).push(e); }
-    
-    // 第二組 H~J（多出來的區塊）
-    const up2   = normCode(e['上游代號']);
-    const down2 = normCode(e['下游代號']);
-    const type2 = normText(e['關係類型']);
+  
+  linksByUp.clear();
+  linksByDown.clear();
+  window.downstreamHJ = [];
 
-    // 判斷是否為 H~J 區塊：
-    // H~J 區塊有 “上游供應鏈關係” 在 K 欄，但 A~C 區塊的 D 欄也叫同名，
-    // 所以使用「所在欄位有值」來分辨（A~C 的 row.H 一定為 undefined）
-    if (e['上游供應鏈關係'] == null && e['上游代號'] !== null && e['下游代號'] !== null && e['關係類型'] !== null) {
-        if (!window.downstreamHJ) window.downstreamHJ = [];
-        downstreamHJ.push({
-          up: up2,
-          down: down2,
-          type: type2
-        });
-    }
-  
-  
-  
+  // 讀取 Links
+  for (let i = 0; i < linksRows.length; i++) {
+
+      const e = linksRows[i];
+
+      // ---- 第一組 A~C（第 0~2 欄）----
+      const A = normCode(e['上游代號']);
+      const B = normCode(e['下游代號']);
+      const C = normText(e['關係類型']);
+
+      // 第一組資料 (A~C) → 上游 / 下游關係
+      if (A && B && C && e['上游供應鏈關係']) {
+          if (!linksByUp.has(A)) linksByUp.set(A, []);
+          linksByUp.get(A).push(e);
+
+          if (!linksByDown.has(B)) linksByDown.set(B, []);
+          linksByDown.get(B).push(e);
+      }
+
+      // ---- 第二組 H~J（第 7~9 欄） ----
+      const H = normCode(e['上游代號_1'] || e['上游代號']);
+      const I = normCode(e['下游代號_1'] || e['下游代號']);
+      const J = normText(e['關係類型_1'] || e['關係類型']);
+
+      // 第二組資料判斷條件：第 7~9 欄位一定是 null / undefined 以外
+      // Excel 在 sheet_to_json 時，H~J 欄會變成：
+      //  e['上游代號'] (第二組)
+      //  e['下游代號'] (第二組)
+      //  e['關係類型'] (第二組)
+      // 且 第二組 row["上游供應鏈關係"] 是 null（因為它在 K 欄）
+      if (
+          A === H &&       // 同一列同名欄位
+          !e['上游供應鏈關係'] &&  // 第二組 K 欄沒有值
+          H && I && J      // 有值
+      ) {
+          window.downstreamHJ.push({
+              up: H,
+              down: I,
+              type: J
+          });
+      }
+
   }
+
 }
 
 function initControls(){
