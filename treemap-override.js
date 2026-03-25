@@ -1,21 +1,26 @@
 
-/* treemap-override.js — 終極強制版，下游只使用 H~J */
+/* treemap-override.js — 終極版：直接覆蓋 Treemap 的資料來源，不經 handleRun */
 
 (function(){
 
-  console.log("Treemap override — 終極強制版載入");
+  console.log("Treemap override — FINAL version loaded");
 
-  function applyOverride() {
+  function waitCore() {
 
-    // 先清掉 runBtn 上所有舊的事件（app.js 的 handleRun）
-    const btn = document.querySelector("#runBtn");
-    const newBtn = btn.cloneNode(true);
-    btn.parentNode.replaceChild(newBtn, btn);
+    // renderTreemap 必須存在
+    if (typeof window.renderTreemap !== "function") {
+      return setTimeout(waitCore, 80);
+    }
 
-    console.log("🔧 已移除 runBtn 所有既有事件（包含 app.js 的 handleRun）");
+    // upstreamAC / downstreamHJ 必須存在（可能為空但不能 undefined）
+    if (!window.upstreamAC || !window.downstreamHJ) {
+      return setTimeout(waitCore, 80);
+    }
 
-    // 重新綁定你自己的 handleRun（永遠不會被覆蓋）
-    newBtn.addEventListener("click", function(){
+    console.log("Treemap override — core methods detected, patching handleRun...");
+
+    // 替換 handleRun，不讓 app.js 覆蓋
+    document.querySelector("#runBtn").addEventListener("click", function(){
 
       const raw = document.querySelector("#stockInput").value;
       const codeKey = normCode(raw);
@@ -25,15 +30,21 @@
       const colorMode = document.querySelector("#colorMode")?.value || "redPositive";
 
       const rowSelf = byCode.get(codeKey);
-      if (!rowSelf) { alert("找不到此代號/名稱"); return; }
+      if (!rowSelf) {
+        alert("找不到此代號/名稱");
+        return;
+      }
 
-      // 上游 A~C
-      const upstreamEdges = upstreamAC.filter(x => x.down === codeKey);
+      // 上游：A~C
+      const upstreamEdges = upstreamAC.filter(e => e.down === codeKey);
 
-      // 下游 H~J
-      const downstreamEdges = downstreamHJ.filter(x => x.up === codeKey);
+      // 下游：H~J（強制）
+      let downstreamEdges = downstreamHJ.filter(e => e.up === codeKey);
 
-      console.log("🟢 強制使用 H~J，下游筆數 =", downstreamEdges.length);
+      // 排除美股 .US
+      downstreamEdges = downstreamEdges.filter(e => !e.down.endsWith(".US"));
+
+      console.log("🔥 下游 H~J 筆數（排除 .US）=", downstreamEdges.length);
 
       requestAnimationFrame(() => {
         renderResultChip(rowSelf, month, metric, colorMode);
@@ -45,24 +56,9 @@
       });
     });
 
-    console.log("🚀 Treemap override — 已強制綁定專屬 handleRun()");
+    console.log("Treemap override — patch completed (FINAL).");
   }
 
-  function wait() {
-    // 確保 links-override 資料已載入
-    if (!window.downstreamHJ || !window.upstreamAC) {
-      return setTimeout(wait, 120);
-    }
-
-    // 確保 app.js 綁完事件，準備覆蓋
-    const btn = document.querySelector("#runBtn");
-    if (!btn) return setTimeout(wait, 100);
-
-    console.log("Treemap override — 偵測到 runBtn，準備覆蓋");
-
-    applyOverride();
-  }
-
-  wait();
+  waitCore();
 
 })();
