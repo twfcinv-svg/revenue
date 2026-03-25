@@ -149,7 +149,12 @@ function handleRun(){
   }catch(_){ }
 
   const upstreamEdges   = linksByDown.get(codeKey) || [];
-  const downstreamEdges = linksByUp.get(codeKey)   || [];
+  //const downstreamEdges = linksByUp.get(codeKey)   || [];
+  // 下游改成 H~J
+  let downstreamEdges = (window.downstreamHJ || []).filter(e => e.up === codeKey);
+
+  // 排除 .US
+  downstreamEdges = downstreamEdges.filter(e => !String(e.down).endsWith('.US'));
 
   requestAnimationFrame(()=>{
     renderResultChip(rowSelf, month, metric, colorMode);
