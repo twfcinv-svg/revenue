@@ -93,6 +93,26 @@ async function loadWorkbook(){
     const down = normCode(e['下游代號']);
     if (up)   { if(!linksByUp.has(up))   linksByUp.set(up, []);   linksByUp.get(up).push(e); }
     if (down) { if(!linksByDown.has(down)) linksByDown.set(down, []); linksByDown.get(down).push(e); }
+    
+    // 第二組 H~J（多出來的區塊）
+    const up2   = normCode(e['上游代號']);
+    const down2 = normCode(e['下游代號']);
+    const type2 = normText(e['關係類型']);
+
+    // 判斷是否為 H~J 區塊：
+    // H~J 區塊有 “上游供應鏈關係” 在 K 欄，但 A~C 區塊的 D 欄也叫同名，
+    // 所以使用「所在欄位有值」來分辨（A~C 的 row.H 一定為 undefined）
+    if (e['上游供應鏈關係'] == null && e['上游代號'] !== null && e['下游代號'] !== null && e['關係類型'] !== null) {
+        if (!window.downstreamHJ) window.downstreamHJ = [];
+        downstreamHJ.push({
+          up: up2,
+          down: down2,
+          type: type2
+        });
+    }
+  
+  
+  
   }
 }
 
@@ -160,30 +180,10 @@ function handleRun(){
     renderResultChip(rowSelf, month, metric, colorMode);
     renderTreemap('upTreemap','upHint',   upstreamEdges,  '上游代號', month, metric, colorMode);
   });
-  // ========== 下游改用 H~J，並等待 downstreamHJ 初始化 ==========
-  (function waitDownstreamReady(){
-      if (!Array.isArray(window.downstreamHJ)) {
-          console.log("等待 downstreamHJ 初始化...");
-          return setTimeout(waitDownstreamReady, 50);
-      }
 
-      // 下游 = H~J
-      let downstreamEdges = window.downstreamHJ.filter(e => e.up === codeKey);
-
-      // 排除 US
-      downstreamEdges = downstreamEdges.filter(e => !String(e.down).endsWith('.US'));
-
-      console.log("H~J 下游筆數 =", downstreamEdges.length);
-
-      requestAnimationFrame(()=>{
-          renderTreemap(
-              'downTreemap','downHint',
-              downstreamEdges,'下游代號',
-              month, metric, colorMode
-          );
-      });
-
-  })();
+  requestAnimationFrame(()=>{
+  renderTreemap('downTreemap','downHint',downstreamEdges,'下游代號', month, metric, colorMode);
+  });
 }
 
 function renderResultChip(selfRow, month, metric, colorMode){
