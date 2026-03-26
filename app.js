@@ -90,7 +90,7 @@ async function loadWorkbook(){
   
   linksByUp.clear();
   linksByDown.clear();
-  window.downstreamHJ = [];
+  
 
   // 讀取 Links
   for (let i = 0; i < linksRows.length; i++) {
@@ -112,21 +112,21 @@ async function loadWorkbook(){
           if (!linksByDown.has(B)) linksByDown.set(B, []);
           linksByDown.get(B).push(e);
       }
-      //
-      // 第二組 H~J（你要的下游資料）
-      //
-      const H = normCode(e['UP_H']);
-      const I = normCode(e['DOWN_H']);
-      const J = normText(e['TYPE_H']);
-      // 第二組 H~J 只要 H, I, J 都有值 → 就是下游
-      if (H && I && J) {
-          window.downstreamHJ.push({
-              up: H,
-              down: I,
-              type: J
-          });
+      const wsDown = wb.Sheets['DownLinks'];
+      const downRows = XLSX.utils.sheet_to_json(wsDown, { defval:null });
+
+      window.downstreamHJ = [];
+
+      for (const e of downRows) {
+         const up = normCode(e['上游代號']);
+         const down = normCode(e['下游代號']);
+         const type = normText(e['關係類型']);
+
+         if (up && down && type) {
+             downstreamHJ.push({ up, down, type });
+         }
       }
-  }
+   }
 
 }
 
