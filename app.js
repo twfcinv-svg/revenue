@@ -81,7 +81,7 @@ async function loadWorkbook(){
   const codeKeyName = CODE_FIELDS.find(k => k in sample) || CODE_FIELDS[0];
   const nameKeyName = NAME_FIELDS.find(k => k in sample) || NAME_FIELDS[0];
   for(const r of revenueRows){
-    const code = normCode(r[codeKeyName]);
+    const code = normCode(String(r[codeKeyName]).replace(/\u3000/g, '').replace(/[\200B-\u200D\uFEFF]/g, '').trim());
     const name = normText(r[nameKeyName]);
     if(code) byCode.set(code, r);
     if(name) byName.set(name, r);
