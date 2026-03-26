@@ -1,12 +1,12 @@
-/* app.js — v3.14 (DownLinks + Treemap UX fix)
+/* app.js — v3.15 (Cleaner Treemap)
  * 修正內容：
  *  A) 右側「下游產業」正確讀取 DownLinks sheet
  *  B) renderTreemap 支援 Links / DownLinks 兩種資料格式
  *  C) DownLinks 讀取加入安全檢查
  *  D) 維持原本 .US 不顯示、MoM/YoY 美股顯示為 —
- *  E) 群組標題顯示「平均值 + 檔數」
- *  F) 小格子保留最小面積，避免看起來像漏資料
- *  G) 節點 tooltip / 點擊查詢 / 小格優先顯示代號
+ *  E) 群組標題只顯示平均值，不顯示幾檔
+ *  F) 若個股格子太小，小到放不下文字，則直接不呈現該檔個股
+ *  G) 節點 tooltip / 點擊查詢
  */
 
 const URL_VER = new URLSearchParams(location.search).get('v') || Date.now();
@@ -26,9 +26,10 @@ const GROUP_WEIGHT_MODE = 'RANK';
 const RANK_WEIGHT_MIN = 0.95;
 const RANK_WEIGHT_MAX = 1.55;
 
-const SHOW_GROUP_COUNT = true;     // 群組標題顯示檔數
 const ENABLE_NODE_CLICK = true;    // 點方塊可重新查詢
-const FORCE_MIN_TILE = 0.35;       // 小格子最小權重，避免太小完全看不到
+const MIN_RENDER_W = 58;           // 個股最小寬度（小於則不顯示）
+const MIN_RENDER_H = 34;           // 個股最小高度（小於則不顯示）
+const MIN_RENDER_AREA = 2400;      // 個股最小面積（小於則不顯示）
 
 let revenueRows = [], linksRows = [], downRows = [], months = [];
 let byCode = new Map();
@@ -268,17 +269,30 @@ const LabelFit = {
   paddingBase: 8,
   maxFont: 36,
   minFontSoft: 9,
-  minFontHard: 3,
+  minFontHard: 8,
   lineHeight: 1.15,
-  dynPadding(w,h){ const m=Math.min(w,h); return Math.max(2, Math.min(this.paddingBase, Math.floor(m*0.08))); },
-  centerText(el,w,h,p){ el.setAttribute('text-anchor','middle'); el.setAttribute('dominant-baseline','middle'); el.setAttribute('x', p + Math.max(0,(w-p*2)/2)); el.setAttribute('y', p + Math.max(0,(h-p*2)/2)); },
+
+  dynPadding(w,h){
+    const m=Math.min(w,h);
+    return Math.max(2, Math.min(this.paddingBase, Math.floor(m*0.08)));
+  },
+
+  centerText(el,w,h,p){
+    el.setAttribute('text-anchor','middle');
+    el.setAttribute('dominant-baseline','middle');
+    el.setAttribute('x', p + Math.max(0,(w-p*2)/2));
+    el.setAttribute('y', p + Math.max(0,(h-p*2)/2));
+  },
+
   ensureClip(gEl,w,h){
     const inset=2;
     const svg=gEl.ownerSVGElement;
     let defs=svg.querySelector('defs');
     if(!defs) defs=svg.insertBefore(document.createElementNS('http://www.w3.org/2000/svg','defs'), svg.firstChild);
+
     const id=gEl.dataset.clipId||('clip-'+Math.random().toString(36).slice(2));
     gEl.dataset.clipId=id;
+
     let clip=svg.querySelector('#'+id);
     if(!clip){
       clip=document.createElementNS('http://www.w3.org/2000/svg','clipPath');
@@ -287,13 +301,16 @@ const LabelFit = {
       clip.appendChild(r);
       defs.appendChild(clip);
     }
+
     const rect=clip.firstChild;
     rect.setAttribute('x',inset);
     rect.setAttribute('y',inset);
     rect.setAttribute('width',Math.max(0,w-inset*2));
     rect.setAttribute('height',Math.max(0,h-inset*2));
+
     gEl.querySelectorAll('text').forEach(t=>t.setAttribute('clip-path',`url(#${id})`));
   },
+
   ellipsizeNameToWidth(textEl,maxW){
     const t1=textEl.querySelector('tspan');
     if(!t1) return;
@@ -301,30 +318,33 @@ const LabelFit = {
     const m=full.match(/^(\d{4})\s*(.*)$/);
     let code='', name=full;
     if(m){ code=m[1]; name=m[2]||''; }
+
     t1.textContent=code+(name?(' '+name):'');
     while(t1.getComputedTextLength()>maxW && name.length>0){
       name=name.slice(0,-1);
       t1.textContent=code+(name?(' '+name+'…'):'');
     }
   },
-  fitBlock(textEl,w,h){
+
+  canFit(textEl,w,h){
     const p=this.dynPadding(w,h);
     const targetW=Math.max(1,w-p*2), targetH=Math.max(1,h-p*2);
     const code=textEl.dataset.code||'';
     const name=textEl.dataset.name||'';
     const pct=textEl.dataset.pct||'';
+
     const layouts=[
       ()=>[`${code}${name?(' '+name):''}`, pct],
-      ()=>[code, pct],
-      ()=>[code],
-      ()=>[pct]
+      ()=>[code, pct]
     ];
+
     const k=0.12;
     const areaFont=Math.sqrt(targetW*targetH)*k;
     const logicalMax=Math.min(this.maxFont, Math.floor(targetH*0.5));
 
     for(const L of layouts){
       while(textEl.firstChild) textEl.removeChild(textEl.firstChild);
+
       L().forEach(s=>{
         const t=document.createElementNS('http://www.w3.org/2000/svg','tspan');
         t.textContent=s;
@@ -348,8 +368,67 @@ const LabelFit = {
           this.centerText(textEl,w,h,p);
           continue;
         }
-        if(sW<1 && f<=this.minFontHard){
-          this.ellipsizeNameToWidth(textEl, targetW);
+        break;
+      }
+
+      const tsp=textEl.querySelectorAll('tspan');
+      const n=Math.max(1,tsp.length);
+      const offsetEm=-((n-1)*this.lineHeight/2);
+      tsp.forEach((t,i)=>{
+        t.setAttribute('x', textEl.getAttribute('x'));
+        t.setAttribute('dy', i===0?`${offsetEm}em`:`${this.lineHeight}em`);
+      });
+
+      const box=textEl.getBBox();
+      if(box.width<=targetW+0.1 && box.height<=targetH+0.1){
+        return true;
+      }
+    }
+
+    return false;
+  },
+
+  fitBlock(textEl,w,h){
+    const p=this.dynPadding(w,h);
+    const targetW=Math.max(1,w-p*2), targetH=Math.max(1,h-p*2);
+    const code=textEl.dataset.code||'';
+    const name=textEl.dataset.name||'';
+    const pct=textEl.dataset.pct||'';
+
+    const layouts=[
+      ()=>[`${code}${name?(' '+name):''}`, pct],
+      ()=>[code, pct]
+    ];
+
+    const k=0.12;
+    const areaFont=Math.sqrt(targetW*targetH)*k;
+    const logicalMax=Math.min(this.maxFont, Math.floor(targetH*0.5));
+
+    for(const L of layouts){
+      while(textEl.firstChild) textEl.removeChild(textEl.firstChild);
+
+      L().forEach(s=>{
+        const t=document.createElementNS('http://www.w3.org/2000/svg','tspan');
+        t.textContent=s;
+        textEl.appendChild(t);
+      });
+
+      let f=Math.max(this.minFontHard, Math.min(logicalMax, Math.floor(areaFont)));
+      textEl.setAttribute('font-size',f);
+      this.centerText(textEl,w,h,p);
+      this.ellipsizeNameToWidth(textEl, targetW);
+
+      let guard=0;
+      while(guard++<60){
+        const bb=textEl.getBBox();
+        const sW=targetW/Math.max(1,bb.width), sH=targetH/Math.max(1,bb.height);
+        const s=Math.min(sW,sH,1);
+        const next=Math.max(this.minFontHard, Math.floor(f*s));
+        if(next<f){
+          f=next;
+          textEl.setAttribute('font-size',f);
+          this.centerText(textEl,w,h,p);
+          continue;
         }
         break;
       }
@@ -365,11 +444,12 @@ const LabelFit = {
       const box=textEl.getBBox();
       if(box.width<=targetW+0.1 && box.height<=targetH+0.1){
         textEl.removeAttribute('display');
-        return;
+        return true;
       }
     }
 
     textEl.setAttribute('display','none');
+    return false;
   }
 };
 
@@ -379,11 +459,13 @@ const GroupTitleFit = {
   lineHeight: 1.12,
   inset: 4,
   k: 0.12,
+
   ensureHeaderClip(svg, gEl, d, headerH){
     const id=gEl.dataset.headerClipId||('hclip-'+Math.random().toString(36).slice(2));
     gEl.dataset.headerClipId=id;
     let defs=svg.querySelector('defs');
     if(!defs) defs=svg.insertBefore(document.createElementNS('http://www.w3.org/2000/svg','defs'), svg.firstChild);
+
     let clip=svg.querySelector('#'+id);
     if(!clip){
       clip=document.createElementNS('http://www.w3.org/2000/svg','clipPath');
@@ -393,6 +475,7 @@ const GroupTitleFit = {
       clip.appendChild(r);
       defs.appendChild(clip);
     }
+
     const r=clip.firstChild;
     const w=Math.max(0,d.x1-d.x0), h=Math.max(0,headerH);
     r.setAttribute('x', d.x0+this.inset);
@@ -411,9 +494,8 @@ const GroupTitleFit = {
     const tSep=document.createElementNS('http://www.w3.org/2000/svg','tspan');
     tSep.textContent='  ';
 
-    const countText = SHOW_GROUP_COUNT ? `｜${d.data.count || 0}檔` : '';
     const tAvg=document.createElementNS('http://www.w3.org/2000/svg','tspan');
-    tAvg.textContent=`平均：${displayPct(d.data.avg)}${countText}`;
+    tAvg.textContent=`平均：${displayPct(d.data.avg)}`;
 
     text.appendChild(tName);
     text.appendChild(tSep);
@@ -427,9 +509,8 @@ const GroupTitleFit = {
     const tName=document.createElementNS('http://www.w3.org/2000/svg','tspan');
     tName.textContent=d.data.name||'';
 
-    const countText = SHOW_GROUP_COUNT ? `｜${d.data.count || 0}檔` : '';
     const tAvg=document.createElementNS('http://www.w3.org/2000/svg','tspan');
-    tAvg.textContent=`平均：${displayPct(d.data.avg)}${countText}`;
+    tAvg.textContent=`平均：${displayPct(d.data.avg)}`;
 
     text.appendChild(tName);
     text.appendChild(tAvg);
@@ -574,7 +655,7 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
     const minLeafRaw = d3.min(list.map(d=> Number.isFinite(d.raw)? d.raw : 0));
     const baseValues = list.map(s => {
       const valNum = Number.isFinite(s.raw)? s.raw : minLeafRaw;
-      return { s, base: Math.max(FORCE_MIN_TILE, (valNum - minLeafRaw + EPS)) };
+      return { s, base: Math.max(EPS, (valNum - minLeafRaw + EPS)) };
     });
     const baseSum = d3.sum(baseValues, d=>d.base) || EPS;
     groupSummaries.push({ rel, list, avg, baseValues, baseSum });
@@ -597,10 +678,11 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
     });
   }
 
-  const children=[];
+  let children=[];
   for (const g of groupSummaries){
     const gw = groupWeights.get(g.rel) || 1;
     const scale = gw / (g.baseSum || EPS);
+
     const kids = g.baseValues.map(({s, base})=>({
       name:s.name||'',
       code:s.code,
@@ -612,12 +694,37 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
     children.push({
       name:g.rel,
       avg:g.avg,
-      count:g.list.length,
       children:kids
     });
   }
 
-  const root=d3.hierarchy({ children }).sum(d=>d.value).sort((a,b)=>(b.value||0)-(a.value||0));
+  // ===== 第一次 layout：先算出位置 =====
+  let root=d3.hierarchy({ children }).sum(d=>d.value).sort((a,b)=>(b.value||0)-(a.value||0));
+  d3.treemap().size([W,H]).paddingOuter(8).paddingInner(3).paddingTop(HEADER_H)(root);
+
+  // ===== 過濾太小的個股 =====
+  const filteredChildren = (root.children || []).map(parent => {
+    const keptLeaves = (parent.children || []).filter(leaf => {
+      const w = Math.max(0, leaf.x1 - leaf.x0);
+      const h = Math.max(0, leaf.y1 - leaf.y0);
+      const area = w * h;
+      return w >= MIN_RENDER_W && h >= MIN_RENDER_H && area >= MIN_RENDER_AREA;
+    }).map(leaf => leaf.data);
+
+    return {
+      name: parent.data.name,
+      avg: parent.data.avg,
+      children: keptLeaves
+    };
+  }).filter(g => g.children && g.children.length > 0);
+
+  if(filteredChildren.length === 0){
+    hint.textContent='此區個股方塊過小，已自動省略';
+    return;
+  }
+
+  // ===== 第二次 layout：只對保留下來的個股重新排版 =====
+  root=d3.hierarchy({ children: filteredChildren }).sum(d=>d.value).sort((a,b)=>(b.value||0)-(a.value||0));
   d3.treemap().size([W,H]).paddingOuter(8).paddingInner(3).paddingTop(HEADER_H)(root);
 
   const g=svg.append('g');
