@@ -111,26 +111,16 @@ async function loadWorkbook(){
           linksByDown.get(B).push(e);
       }
 
-      // ---- 第二組 H~J（第 7~9 欄） ----
-      const H = normCode(e['上游代號_1'] || e['上游代號']);
-      const I = normCode(e['下游代號_1'] || e['下游代號']);
-      const J = normText(e['關係類型_1'] || e['關係類型']);
+      const H = normCode(e['上游代號_H']);
+      const I = normCode(e['下游代號_H']);
+      const J = normText(e['關係類型_H']);
 
-      // 第二組資料判斷條件：第 7~9 欄位一定是 null / undefined 以外
-      // Excel 在 sheet_to_json 時，H~J 欄會變成：
-      //  e['上游代號'] (第二組)
-      //  e['下游代號'] (第二組)
-      //  e['關係類型'] (第二組)
-      // 且 第二組 row["上游供應鏈關係"] 是 null（因為它在 K 欄）
-      if (
-          A === H &&       // 同一列同名欄位
-          !e['上游供應鏈關係'] &&  // 第二組 K 欄沒有值
-          H && I && J      // 有值
-      ) {
-          window.downstreamHJ.push({
-              up: H,
-              down: I,
-              type: J
+      if (H && I && J) {
+          if (!window.downstreamHJ) window.downstreamHJ = [];
+          downstreamHJ.push({
+            up: H,
+            down: I,
+            type: J
           });
       }
 
