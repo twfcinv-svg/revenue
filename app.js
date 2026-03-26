@@ -112,14 +112,12 @@ async function loadWorkbook(){
           if (!linksByDown.has(B)) linksByDown.set(B, []);
           linksByDown.get(B).push(e);
       }
-
       //
       // 第二組 H~J（你要的下游資料）
       //
-      const H = normCode(e['上游代號_H']);
-      const I = normCode(e['下游代號_H']);
-      const J = normText(e['關係類型_H']);
-
+      const H = normCode(e['UP_H']);
+      const I = normCode(e['DOWN_H']);
+      const J = normText(e['TYPE_H']);
       // 第二組 H~J 只要 H, I, J 都有值 → 就是下游
       if (H && I && J) {
           window.downstreamHJ.push({
