@@ -94,16 +94,18 @@ async function loadWorkbook(){
 
   // 讀取 Links
   for (let i = 0; i < linksRows.length; i++) {
-
+    
       const e = linksRows[i];
 
-      // ---- 第一組 A~C（第 0~2 欄）----
+      //
+      // 第一組 A~C（上游產業）
+      //
       const A = normCode(e['上游代號']);
       const B = normCode(e['下游代號']);
       const C = normText(e['關係類型']);
 
-      // 第一組資料 (A~C) → 上游 / 下游關係
-      if (A && B && C && e['上游供應鏈關係']) {
+      //  第一組 A~C → 上游 Treemap（左側）
+      if (A && B && C) {
           if (!linksByUp.has(A)) linksByUp.set(A, []);
           linksByUp.get(A).push(e);
 
@@ -111,19 +113,21 @@ async function loadWorkbook(){
           linksByDown.get(B).push(e);
       }
 
+      //
+      // 第二組 H~J（你要的下游資料）
+      //
       const H = normCode(e['上游代號_H']);
       const I = normCode(e['下游代號_H']);
       const J = normText(e['關係類型_H']);
 
+      // 第二組 H~J 只要 H, I, J 都有值 → 就是下游
       if (H && I && J) {
-          if (!window.downstreamHJ) window.downstreamHJ = [];
-          downstreamHJ.push({
-            up: H,
-            down: I,
-            type: J
+          window.downstreamHJ.push({
+              up: H,
+              down: I,
+              type: J
           });
       }
-
   }
 
 }
@@ -183,9 +187,9 @@ function handleRun(){
   const upstreamEdges   = linksByDown.get(codeKey) || [];
   //const downstreamEdges = linksByUp.get(codeKey)   || [];
   // 下游改成 H~J
-  let downstreamEdges = (window.downstreamHJ || []).filter(e => e.up === codeKey);
+  let downstreamEdges = window.downstreamHJ.filter(e => e.up === codeKey);
 
-  // 排除 .US
+  // 排除 US
   downstreamEdges = downstreamEdges.filter(e => !String(e.down).endsWith('.US'));
 
   requestAnimationFrame(()=>{
