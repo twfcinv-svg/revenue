@@ -91,20 +91,14 @@ async function loadWorkbook(){
   linksByUp.clear();
   linksByDown.clear();
   
-
   // 讀取 Links
   for (let i = 0; i < linksRows.length; i++) {
-    
       const e = linksRows[i];
-
-      //
       // 第一組 A~C（上游產業）
-      //
       const A = normCode(e['上游代號']);
       const B = normCode(e['下游代號']);
       const C = normText(e['關係類型']);
 
-      //  第一組 A~C → 上游 Treemap（左側）
       if (A && B && C) {
           if (!linksByUp.has(A)) linksByUp.set(A, []);
           linksByUp.get(A).push(e);
@@ -112,22 +106,21 @@ async function loadWorkbook(){
           if (!linksByDown.has(B)) linksByDown.set(B, []);
           linksByDown.get(B).push(e);
       }
-      const wsDown = wb.Sheets['DownLinks'];
-      const downRows = XLSX.utils.sheet_to_json(wsDown, { defval:null });
-
-      window.downstreamHJ = [];
-
-      for (const e of downRows) {
-         const up = normCode(e['上游代號']);
-         const down = normCode(e['下游代號']);
-         const type = normText(e['關係類型']);
+  }
+  // 第二組 H~J（上游產業）
+  const wsDown = wb.Sheets['DownLinks'];
+  const downRows = XLSX.utils.sheet_to_json(wsDown, { defval:null });
+  window.downstreamHJ = [];
+  for (const row of downRows) {
+         const up = normCode(row['上游代號']);
+         const down = normCode(row['下游代號']);
+         const type = normText(row['關係類型']);
 
          if (up && down && type) {
              downstreamHJ.push({ up, down, type });
          }
-      }
-   }
-
+  }
+  console.log("下游資料筆數 = ",downstreamHJ.length);
 }
 
 function initControls(){
