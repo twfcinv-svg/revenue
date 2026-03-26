@@ -1,16 +1,17 @@
-/* app.js — v3.12 (patch, US filter)
- * 變更點（本版新增）：
- *  A) Treemap 直接「不顯示」美股（代碼以 .US 結尾）
- *     - 來源在 Links 的上/下游名單若為 .US，將被 treemap 過濾，不建立節點。
- *  B) 其它需求照舊：
- *     - getMetricValue 對 .US 一律回傳 null（任何位置的 MoM/YoY 皆顯示為『—』）。
- *     - 既有「不漏檔」與面積計算、群組標題等行為維持不變。
+/* app.js — v3.13 (DownLinks fix)
+ * 修正內容：
+ *  A) 右側「下游產業」改為正確讀取 DownLinks sheet
+ *  B) renderTreemap 支援 Links / DownLinks 兩種資料格式
+ *  C) DownLinks 讀取加入安全檢查
+ *  D) 維持原本 .US 不顯示、MoM/YoY 美股顯示為 —
  */
 
 const URL_VER = new URLSearchParams(location.search).get('v') || Date.now();
 const XLSX_FILE = new URL(`./data.xlsx?v=${URL_VER}`, location.href).toString();
 const REVENUE_SHEET = 'Revenue';
 const LINKS_SHEET   = 'Links';
+const DOWNLINKS_SHEET = 'DownLinks';
+
 const CODE_FIELDS = ['個股','代號','股票代碼','股票代號','公司代號','證券代號'];
 const NAME_FIELDS = ['名稱','公司名稱','證券名稱'];
 const COL_MAP = {};
@@ -22,11 +23,12 @@ const GROUP_WEIGHT_MODE = 'RANK';
 const RANK_WEIGHT_MIN = 0.95;
 const RANK_WEIGHT_MAX = 1.55;
 
-let revenueRows = [], linksRows = [], months = [];
+let revenueRows = [], linksRows = [], downRows = [], months = [];
 let byCode = new Map();
 let byName = new Map();
 let linksByUp = new Map();
 let linksByDown = new Map();
+let downstreamHJ = [];
 
 function z(s){ return String(s==null?'':s); }
 function toHalfWidth(str){ return z(str).replace(/[０-９Ａ-Ｚａ-ｚ]/g, ch=>String.fromCharCode(ch.charCodeAt(0)-0xFEE0)); }
@@ -55,92 +57,126 @@ function setupDownloadButton(){
 async function loadWorkbook(){
   const res = await fetch(XLSX_FILE, { cache:'no-store' });
   if(!res.ok) throw new Error('讀取 data.xlsx 失敗 HTTP '+res.status);
-  const buf = await res.arrayBuffer(); const wb  = XLSX.read(buf, { type:'array' });
+  const buf = await res.arrayBuffer(); 
+  const wb  = XLSX.read(buf, { type:'array' });
 
   const wsRev = wb.Sheets[REVENUE_SHEET];
   const wsLinks = wb.Sheets[LINKS_SHEET];
+  const wsDown = wb.Sheets[DOWNLINKS_SHEET];
+
   if(!wsRev || !wsLinks) throw new Error('找不到必要工作表 Revenue 或 Links');
 
   const rowsHeaderFirst = XLSX.utils.sheet_to_json(wsRev, { header:1, blankrows:false });
   const headerRow = Array.isArray(rowsHeaderFirst) && rowsHeaderFirst.length>0 ? rowsHeaderFirst[0] : [];
   const found = new Set();
+
   for(const rawHeader of headerRow){
-    if (!rawHeader) continue; const h = normText(String(rawHeader));
+    if (!rawHeader) continue; 
+    const h = normText(String(rawHeader));
+
     let m = h.match(/^(\d{4})[\/年-]?\s*(\d{1,2})\s*單月合併營收\s*年[成增]長\s*[\(（]?\s*(?:%|％)\s*[\)）]?$/);
-    if(m){ const ym=m[1]+String(m[2]).padStart(2,'0'); (COL_MAP[ym]??=({})).YoY = rawHeader; found.add(ym); continue; }
+    if(m){ 
+      const ym=m[1]+String(m[2]).padStart(2,'0'); 
+      (COL_MAP[ym]??=({})).YoY = rawHeader; 
+      found.add(ym); 
+      continue; 
+    }
+
     m = h.match(/^(\d{4})[\/年-]?\s*(\d{1,2})\s*單月合併營收\s*月[變增]動\s*[\(（]?\s*(?:%|％)\s*[\)）]?$/);
-    if(m){ const ym=m[1]+String(m[2]).padStart(2,'0'); (COL_MAP[ym]??=({})).MoM = rawHeader; found.add(ym); continue; }
+    if(m){ 
+      const ym=m[1]+String(m[2]).padStart(2,'0'); 
+      (COL_MAP[ym]??=({})).MoM = rawHeader; 
+      found.add(ym); 
+      continue; 
+    }
   }
+
   months = Array.from(found).sort((a,b)=>b.localeCompare(a));
 
   revenueRows = XLSX.utils.sheet_to_json(wsRev,   { defval:null });
   linksRows   = XLSX.utils.sheet_to_json(wsLinks, { defval:null });
+  downRows    = wsDown ? XLSX.utils.sheet_to_json(wsDown, { defval:null }) : [];
 
-  byCode.clear(); byName.clear();
+  byCode.clear(); 
+  byName.clear();
+
   const sample = revenueRows[0] || {};
   const codeKeyName = CODE_FIELDS.find(k => k in sample) || CODE_FIELDS[0];
   const nameKeyName = NAME_FIELDS.find(k => k in sample) || NAME_FIELDS[0];
+
   for(const r of revenueRows){
-    const code = normCode(String(r[codeKeyName]).replace(/\u3000/g, '').replace(/[\200B-\u200D\uFEFF]/g, '').trim());
+    const code = normCode(String(r[codeKeyName]).replace(/\u3000/g, '').replace(/[\u200B-\u200D\uFEFF]/g, '').trim());
     const name = normText(r[nameKeyName]);
     if(code) byCode.set(code, r);
     if(name) byName.set(name, r);
   }
 
-  
   linksByUp.clear();
   linksByDown.clear();
-  
-  // 讀取 Links
-  for (let i = 0; i < linksRows.length; i++) {
-      const e = linksRows[i];
-      // 第一組 A~C（上游產業）
-      const A = normCode(e['上游代號']);
-      const B = normCode(e['下游代號']);
-      const C = normText(e['關係類型']);
 
-      if (A && B && C) {
-          if (!linksByUp.has(A)) linksByUp.set(A, []);
-          linksByUp.get(A).push(e);
+  // ===== Links（左邊上游）=====
+  for (const e of linksRows) {
+    const A = normCode(e['上游代號']);
+    const B = normCode(e['下游代號']);
+    const C = normText(e['關係類型']);
 
-          if (!linksByDown.has(B)) linksByDown.set(B, []);
-          linksByDown.get(B).push(e);
-      }
+    if (A && B && C) {
+      if (!linksByUp.has(A)) linksByUp.set(A, []);
+      linksByUp.get(A).push(e);
+
+      if (!linksByDown.has(B)) linksByDown.set(B, []);
+      linksByDown.get(B).push(e);
+    }
   }
-  // 第二組 H~J（上游產業）
-  const wsDown = wb.Sheets['DownLinks'];
-  const downRows = XLSX.utils.sheet_to_json(wsDown, { defval:null });
-  window.downstreamHJ = [];
+
+  // ===== DownLinks（右邊下游）=====
+  downstreamHJ = [];
   for (const row of downRows) {
-         const up = normCode(row['上游代號']);
-         const down = normCode(row['下游代號']);
-         const type = normText(row['關係類型']);
+    const up = normCode(row['上游代號']);
+    const down = normCode(row['下游代號']);
+    const type = normText(row['關係類型']);
 
-         if (up && down && type) {
-             downstreamHJ.push({ up, down, type });
-         }
+    if (up && down && type) {
+      downstreamHJ.push({
+        '上游代號': up,
+        '下游代號': down,
+        '關係類型': type
+      });
+    }
   }
-  console.log("下游資料筆數 = ",downstreamHJ.length);
+
+  console.log("Links 筆數 =", linksRows.length);
+  console.log("DownLinks 筆數 =", downstreamHJ.length);
 }
 
 function initControls(){
-  const sel=document.querySelector('#monthSelect'); sel.innerHTML='';
-  for(const m of months){ const o=document.createElement('option'); o.value=m; o.textContent=`${m.slice(0,4)}年${m.slice(4,6)}月`; sel.appendChild(o); }
+  const sel=document.querySelector('#monthSelect'); 
+  sel.innerHTML='';
+  for(const m of months){ 
+    const o=document.createElement('option'); 
+    o.value=m; 
+    o.textContent=`${m.slice(0,4)}年${m.slice(4,6)}月`; 
+    sel.appendChild(o); 
+  }
   if(!sel.value && months.length>0) sel.value=months[0];
 }
 
 function getMetricValue(row, month, metric){
   if(!row || !month || !metric) return null;
-  // 若為 .US 代碼 → 一律不顯示 MoM/YoY
+
   const codeOfRow = normCode(
     row['個股'] || row['代號'] || row['股票代碼'] ||
     row['股票代號'] || row['公司代號'] || row['證券代號'] || ''
   );
+
   if (isUSCode(codeOfRow)) return null;
 
   const col = (COL_MAP[month] || {})[metric];
-  if(!col) return null; let v = row[col]; if(v==null || v==='') return null;
-  if(typeof v === 'string') v = v.replace('%','').replace('％','').trim(); v = Number(v);
+  if(!col) return null; 
+  let v = row[col]; 
+  if(v==null || v==='') return null;
+  if(typeof v === 'string') v = v.replace('%','').replace('％','').trim(); 
+  v = Number(v);
   return Number.isFinite(v) ? v : null;
 }
 
@@ -150,7 +186,10 @@ function handleRun(){
   const metric  = (document.querySelector('#metricSelect')?.value)||'MoM';
   const colorMode=(document.querySelector('#colorMode')?.value)||'redPositive';
 
-  if(!raw || !raw.trim()){ alert('請輸入股票代號或公司名稱'); return; }
+  if(!raw || !raw.trim()){ 
+    alert('請輸入股票代號或公司名稱'); 
+    return; 
+  }
 
   let codeKey = normCode(raw);
   let rowSelf = byCode.get(codeKey);
@@ -166,7 +205,10 @@ function handleRun(){
     }
   }
 
-  if(!rowSelf){ alert('找不到此代號/名稱'); return; }
+  if(!rowSelf){ 
+    alert('找不到此代號/名稱'); 
+    return; 
+  }
 
   try{
     const codeLabel = (rowSelf['個股'] || rowSelf['代號'] || rowSelf['股票代碼'] || rowSelf['股票代號'] || rowSelf['公司代號'] || rowSelf['證券代號'] || '').trim();
@@ -175,27 +217,25 @@ function handleRun(){
     if (window.setResultChipLink) window.setResultChipLink(codeLabel, nameLabel, extra);
   }catch(_){ }
 
-  const upstreamEdges   = linksByDown.get(codeKey) || [];
-  //const downstreamEdges = linksByUp.get(codeKey)   || [];
-  // 下游改成 H~J
-  let downstreamEdges = window.downstreamHJ.filter(e => e.up === codeKey);
+  const upstreamEdges = linksByDown.get(codeKey) || [];
+  let downstreamEdges = downstreamHJ.filter(e => e['上游代號'] === codeKey);
 
-  // 排除 US
-  downstreamEdges = downstreamEdges.filter(e => !String(e.down).endsWith('.US'));
+  downstreamEdges = downstreamEdges.filter(e => !String(e['下游代號']).endsWith('.US'));
 
   requestAnimationFrame(()=>{
     renderResultChip(rowSelf, month, metric, colorMode);
-    renderTreemap('upTreemap','upHint',   upstreamEdges,  '上游代號', month, metric, colorMode);
+    renderTreemap('upTreemap','upHint',upstreamEdges,'上游代號', month, metric, colorMode);
   });
 
   requestAnimationFrame(()=>{
-  renderTreemap('downTreemap','downHint',downstreamEdges,'下游代號', month, metric, colorMode);
+    renderTreemap('downTreemap','downHint',downstreamEdges,'下游代號', month, metric, colorMode);
   });
 }
 
 function renderResultChip(selfRow, month, metric, colorMode){
   const host=document.querySelector('#resultChip');
-  const v=getMetricValue(selfRow,month,metric); const bg=colorFor(v, colorMode);
+  const v=getMetricValue(selfRow,month,metric); 
+  const bg=colorFor(v, colorMode);
   const showCode = selfRow['個股'] || selfRow['代號'] || selfRow['股票代碼'] || selfRow['股票代號'] || selfRow['公司代號'] || selfRow['證券代號'] || '';
   const showName = selfRow['名稱'] || selfRow['公司名稱'] || selfRow['證券名稱'] || '';
   host.innerHTML=`
@@ -219,7 +259,7 @@ const LabelFit = {
   fitBlock(textEl,w,h){ const p=this.dynPadding(w,h); const targetW=Math.max(1,w-p*2), targetH=Math.max(1,h-p*2); const code=textEl.dataset.code||''; const name=textEl.dataset.name||''; const pct=textEl.dataset.pct||''; const layouts=[ ()=>[`${code}${name?(' '+name):''}`, pct], ()=>[code, pct], ()=>[pct] ]; const k=0.12; const areaFont=Math.sqrt(targetW*targetH)*k; const logicalMax=Math.min(this.maxFont, Math.floor(targetH*0.5)); for(const L of layouts){ while(textEl.firstChild) textEl.removeChild(textEl.firstChild); L().forEach(s=>{ const t=document.createElementNS('http://www.w3.org/2000/svg','tspan'); t.textContent=s; textEl.appendChild(t); }); let f=Math.max(this.minFontHard, Math.min(logicalMax, Math.floor(areaFont))); textEl.setAttribute('font-size',f); this.centerText(textEl,w,h,p); this.ellipsizeNameToWidth(textEl, targetW); let guard=0; while(guard++<60){ const bb=textEl.getBBox(); const sW=targetW/Math.max(1,bb.width), sH=targetH/Math.max(1,bb.height); const s=Math.min(sW,sH,1); const next=Math.max(this.minFontHard, Math.floor(f*s)); if(next<f){ f=next; textEl.setAttribute('font-size',f); this.centerText(textEl,w,h,p); continue; } if(sW<1 && f<=this.minFontHard){ this.ellipsizeNameToWidth(textEl, targetW); } break; } const tsp=textEl.querySelectorAll('tspan'); const n=Math.max(1,tsp.length); const offsetEm=-((n-1)*this.lineHeight/2); tsp.forEach((t,i)=>{ t.setAttribute('x', textEl.getAttribute('x')); t.setAttribute('dy', i===0?`${offsetEm}em`:`${this.lineHeight}em`); }); const box=textEl.getBBox(); if(box.width<=targetW+0.1 && box.height<=targetH+0.1){ textEl.removeAttribute('display'); return; } } textEl.setAttribute('display','none'); }
 };
 
-// ========= 群組標題（保留 v3.11 增強） =========
+// ========= 群組標題 =========
 const GroupTitleFit = {
   minFont: 5,
   lineHeight: 1.12,
@@ -279,27 +319,34 @@ const GroupTitleFit = {
 };
 
 function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode){
-  const svg=d3.select('#'+svgId); svg.selectAll('*').remove();
-  const wrap=svg.node().parentElement; const W=wrap.clientWidth-16; const H=parseInt(getComputedStyle(svg.node()).height)||560;
+  const svg=d3.select('#'+svgId); 
+  svg.selectAll('*').remove();
+
+  const wrap=svg.node().parentElement; 
+  const W=wrap.clientWidth-16; 
+  const H=parseInt(getComputedStyle(svg.node()).height)||560;
   svg.attr('width',W).attr('height',H);
 
   const groups=new Map();
+
   for(const e of edges){
-    const rel=normText(e['關係類型']||'未分類');
-    const keyRaw=normCode(e[codeField]);
-    // 🔥 美股 (.US) 直接不參與 treemap
+    const rel=normText(e['關係類型'] || e['type'] || '未分類');
+    const keyRaw=normCode(e[codeField] || e['down'] || e['up']);
+
     if (isUSCode(keyRaw)) continue;
 
     const r=byCode.get(keyRaw);
+
     if(!r) {
-      const vNull = null;
       if(!groups.has(rel)) groups.set(rel,[]);
-      groups.get(rel).push({ code:keyRaw, name:'', raw:vNull });
+      groups.get(rel).push({ code:keyRaw, name:'', raw:null });
       continue;
     }
-    const v=getMetricValue(r,month,metric); // 允許 null
+
+    const v=getMetricValue(r,month,metric);
     const codeVal = r['個股'] ?? r['代號'] ?? r['股票代碼'] ?? r['股票代號'] ?? r['公司代號'] ?? r['證券代號'];
     const nameVal = r['名稱'] ?? r['公司名稱'] ?? r['證券名稱'];
+
     if(!groups.has(rel)) groups.set(rel,[]);
     groups.get(rel).push({ code:codeVal, name:nameVal, raw:v });
   }
@@ -308,7 +355,12 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
   const kept = new Map(entries);
 
   const hint=document.getElementById(hintId);
-  if(kept.size===0){ hint.textContent='此區在選定月份沒有可用數據'; return; } else { hint.textContent=''; }
+  if(kept.size===0){ 
+    hint.textContent='此區在選定月份沒有可用數據'; 
+    return; 
+  } else { 
+    hint.textContent=''; 
+  }
 
   const EPS = 0.01;
   const groupSummaries = [];
@@ -316,23 +368,26 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
     const avg = d3.mean(list, d=> Number.isFinite(d.raw)? d.raw : null);
     const minLeafRaw = d3.min(list.map(d=> Number.isFinite(d.raw)? d.raw : 0));
     const baseValues = list.map(s => {
-      const valNum = Number.isFinite(s.raw)? s.raw : minLeafRaw; // 無值者給最小值做基準
+      const valNum = Number.isFinite(s.raw)? s.raw : minLeafRaw;
       return { s, base: Math.max(EPS, (valNum - minLeafRaw + EPS)) };
     });
     const baseSum = d3.sum(baseValues, d=>d.base) || EPS;
     groupSummaries.push({ rel, list, avg, baseValues, baseSum });
   }
 
-  // 群組面積權重：RANK 柔性強調 或 AVG 等比
   let groupWeights = new Map();
   if (GROUP_WEIGHT_MODE === 'AVG') {
     const minAvg = d3.min(groupSummaries.map(d=> Number.isFinite(d.avg)? d.avg : 0));
-    for (const g of groupSummaries){ const a = Number.isFinite(g.avg)? g.avg : minAvg; groupWeights.set(g.rel, Math.max(EPS, (a - minAvg + EPS))); }
+    for (const g of groupSummaries){ 
+      const a = Number.isFinite(g.avg)? g.avg : minAvg; 
+      groupWeights.set(g.rel, Math.max(EPS, (a - minAvg + EPS))); 
+    }
   } else {
     const sorted = [...groupSummaries].sort((a,b)=> (Number.isFinite(a.avg)?a.avg:-Infinity) - (Number.isFinite(b.avg)?b.avg:-Infinity));
     const n = Math.max(1, sorted.length-1);
     sorted.forEach((g, i)=>{
-      const t = i / n; const w = RANK_WEIGHT_MIN + t * (RANK_WEIGHT_MAX - RANK_WEIGHT_MIN);
+      const t = i / n; 
+      const w = RANK_WEIGHT_MIN + t * (RANK_WEIGHT_MAX - RANK_WEIGHT_MIN);
       groupWeights.set(g.rel, w);
     });
   }
@@ -385,15 +440,28 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
     const code = `${d.data.code||''}`.trim();
     const name = `${d.data.name||''}`.trim();
     const pct  = displayPct(d.data.raw);
-    this.dataset.code = code; this.dataset.name = name; this.dataset.pct = pct;
-    const t1 = document.createElementNS('http://www.w3.org/2000/svg','tspan'); t1.textContent = `${code}${name?(' '+name):''}`;
-    const t2 = document.createElementNS('http://www.w3.org/2000/svg','tspan'); t2.textContent = pct;
-    this.appendChild(t1); this.appendChild(t2);
-    const title = document.createElementNS('http://www.w3.org/2000/svg','title'); title.textContent = `${code} ${name} ${pct}`; this.appendChild(title);
+    this.dataset.code = code; 
+    this.dataset.name = name; 
+    this.dataset.pct = pct;
+    const t1 = document.createElementNS('http://www.w3.org/2000/svg','tspan'); 
+    t1.textContent = `${code}${name?(' '+name):''}`;
+    const t2 = document.createElementNS('http://www.w3.org/2000/svg','tspan'); 
+    t2.textContent = pct;
+    this.appendChild(t1); 
+    this.appendChild(t2);
+    const title = document.createElementNS('http://www.w3.org/2000/svg','title'); 
+    title.textContent = `${code} ${name} ${pct}`; 
+    this.appendChild(title);
   });
 
   requestAnimationFrame(()=>{
-    node.each(function(d){ const w=Math.max(0,d.x1-d.x0), h=Math.max(0,d.y1-d.y0); const textEl=this.querySelector('text'); if(!textEl) return; LabelFit.fitBlock(textEl, w, h); LabelFit.ensureClip(this, w, h); });
+    node.each(function(d){ 
+      const w=Math.max(0,d.x1-d.x0), h=Math.max(0,d.y1-d.y0); 
+      const textEl=this.querySelector('text'); 
+      if(!textEl) return; 
+      LabelFit.fitBlock(textEl, w, h); 
+      LabelFit.ensureClip(this, w, h); 
+    });
     parents.select('text').each(function(d){ GroupTitleFit.fit(this, d, HEADER_H); });
   });
 
