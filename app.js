@@ -21,14 +21,14 @@ const COL_MAP = {};
 
 // ===== 可調參數 =====
 const HEADER_H = 22;
-const GROUP_KEEP_MAX = 10;
+const GROUP_KEEP_MAX = 8;
 const GROUP_WEIGHT_MODE = 'RANK';
 const RANK_WEIGHT_MIN = 0.65;
 const RANK_WEIGHT_MAX = 2;
 
 const ENABLE_NODE_CLICK = true;    // 點方塊可重新查詢
-const MIN_RENDER_W = 10;           // 個股最小寬度（小於則不顯示）
-const MIN_RENDER_H = 8;           // 個股最小高度（小於則不顯示）
+const MIN_RENDER_W = 20;           // 個股最小寬度（小於則不顯示）
+const MIN_RENDER_H = 15;           // 個股最小高度（小於則不顯示）
 const MIN_RENDER_AREA = 500;      // 個股最小面積（小於則不顯示）
 
 let revenueRows = [], linksRows = [], downRows = [], months = [];
