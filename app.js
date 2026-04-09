@@ -27,7 +27,7 @@ const RANK_WEIGHT_MIN = 1.4;
 const RANK_WEIGHT_MAX = 1.8;
 
 const ENABLE_NODE_CLICK = true;    // 點方塊可重新查詢
-const MIN_RENDER_W = 55;           // 個股最小寬度（小於則不顯示）
+const MIN_RENDER_W = 75;           // 個股最小寬度（小於則不顯示）
 const MIN_RENDER_H = 20;           // 個股最小高度（小於則不顯示）
 const MIN_RENDER_AREA = 680;      // 個股最小面積（小於則不顯示）
 
