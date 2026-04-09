@@ -23,11 +23,11 @@ const COL_MAP = {};
 const HEADER_H = 22;
 const GROUP_KEEP_MAX = 7;
 const GROUP_WEIGHT_MODE = 'RANK';
-const RANK_WEIGHT_MIN = 1.45;
+const RANK_WEIGHT_MIN = 1.2;
 const RANK_WEIGHT_MAX = 1.8;
 
 const ENABLE_NODE_CLICK = true;    // 點方塊可重新查詢
-const MIN_RENDER_W = 30;           // 個股最小寬度（小於則不顯示）
+const MIN_RENDER_W = 50;           // 個股最小寬度（小於則不顯示）
 const MIN_RENDER_H = 20;           // 個股最小高度（小於則不顯示）
 const MIN_RENDER_AREA = 650;      // 個股最小面積（小於則不顯示）
 
