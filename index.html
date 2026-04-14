@@ -7,14 +7,40 @@
   <script>
     const VER = new URLSearchParams(location.search).get('v') || Date.now();
     document.write('<link rel="stylesheet" href="styles.css?v='+VER+'">');
-    // ✅ 新增：載入對齊修正用 CSS（含 --icp-nudge-top / --icp-nudge-bottom）
     document.write('<link rel="stylesheet" href="fix-align.css?v='+VER+'">');
   </script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+
   <style>
     body { margin: 0; }
-    .page-title { margin: 16px 16px 8px; font-weight: 700; font-size: 30px; line-height: 1.25; color: #fff; }
+
+    /* ✅ 新增：標題區塊（置中 + 右上角資訊） */
+    .header-bar {
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 16px;
+    }
+
+    .page-title {
+      font-weight: 700;
+      font-size: 30px;
+      color: #fff;
+      text-align: center;
+    }
+
+    /* ✅ 右上角資料來源 */
+    .data-source {
+      position: absolute;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 12px;
+      color: #cbd5e1;
+    }
+
     .controls { margin: 8px 16px 12px; }
     .layout { margin: 0 16px 24px; }
 
@@ -31,38 +57,30 @@
     .line-mom { fill: none; stroke: #f4d03f; stroke-width: 2px; }
     .line-yoy { fill: none; stroke: #00d8d6; stroke-width: 2px; }
     .zero-line { stroke: rgba(255,255,255,.25); stroke-dasharray: 4 4; }
+
     .legend-row { display: flex; align-items:center; gap:12px; color:#e5e7eb; margin: 6px 2px 0; flex-wrap: wrap; }
     .legend-row .chip { display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:2px 8px; border-radius:999px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); }
-    .chip .swatch { width:12px; height:12px; border-radius:2px; display:inline-block; }
+
     .meta { color: #cbd5e1; font-size: 12px; }
 
     #icp-section { margin: 24px 16px; }
     #icp-section .section-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
 
-    #icp-fold-wrap { position: relative; }
-    #icp-scroll { overflow: hidden; transition: max-height .25s ease, margin-top .25s ease; }
-    #icp-fade { position:absolute; left:0; right:0; height:42px; bottom:0; background:linear-gradient(to bottom, rgba(15,23,42,0), rgba(15,23,42,.95)); pointer-events:none; display:none; }
-    #icp-expander { position:absolute; left:50%; transform:translateX(-50%); font-size:22px; font-weight:900; color:#fff; background:transparent; border:none; padding:0; cursor:pointer; z-index:10; user-select:none; }
-
     #icp-grid { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
-    .icp-box { background: rgba(15,23,42,.40); border:1px solid rgba(255,255,255,.08); border-radius:8px; padding:10px; color:#e5e7eb; min-height:180px; }
-    .icp-title { font-weight:900; letter-spacing:.5px; margin:4px 0 10px; color:#ffffff; font-size:16px; }
 
-    .icp-card { background: rgba(255,255,255,.02); border:1px dashed rgba(255,255,255,.18); border-radius:8px; padding:10px; margin-bottom:10px; transition: border-color .15s ease, box-shadow .15s ease; }
-    .icp-card:hover { border-color:#ffffff; box-shadow: 0 0 0 1px #ffffff inset; }
-    .icp-card-title { font-weight:800; color:#93c5fd; margin-bottom:6px; font-size:14px; letter-spacing:.3px; }
-
-    .icp-box ul { list-style:none; margin:0; padding:0; }
-    .icp-box li { padding:4px 2px; border-bottom:1px dashed rgba(255,255,255,.08); font-size:13px; line-height:1.35; transition: transform .12s ease, font-weight .12s ease, color .12s ease; cursor:pointer; }
-    .icp-box li:hover { font-weight:800; transform: translateY(-1px); color:#ffffff; }
-    .icp-box .code { display:inline-block; min-width:52px; color:#fff; font-weight:700; }
-
-    .icp-note { display:none; }
-    @media (max-width: 980px){ #icp-grid{ grid-template-columns: 1fr; } }
+    @media (max-width: 980px){
+      #icp-grid{ grid-template-columns: 1fr; }
+    }
   </style>
 </head>
+
 <body>
-  <h1 class="page-title">營收互動儀錶板</h1>
+
+  <!-- ✅ 新增 header -->
+  <div class="header-bar">
+    <h1 class="page-title">營收互動儀錶板</h1>
+    <div class="data-source">資料來源：CMoney、Bloomberg</div>
+  </div>
 
   <section class="controls">
     <div class="field">
