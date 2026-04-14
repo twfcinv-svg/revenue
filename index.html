@@ -15,24 +15,24 @@
   <style>
     body { margin: 0; }
 
-    /* ✅ 不破版 header（關鍵） */
-    .header-bar {
-      display: grid;
-      grid-template-columns: 1fr auto 1fr;
+    /* ✅ 新增：安全置中 header（不動原本 class） */
+    .header-wrap {
+      position: relative;
+      display: flex;
+      justify-content: center;
       align-items: center;
-      padding: 16px;
     }
 
-    .page-title {
-      margin: 0;
-      font-weight: 700;
-      font-size: 30px;
-      color: #fff;
-      text-align: center;
+    .header-wrap .page-title {
+      margin: 16px 16px 8px;
     }
 
+    /* ✅ 右上角資料來源（不影響 layout） */
     .data-source {
-      justify-self: end;
+      position: absolute;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
       font-size: 12px;
       color: #cbd5e1;
     }
@@ -57,28 +57,45 @@
 
     .legend-row { display: flex; align-items:center; gap:12px; color:#e5e7eb; margin: 6px 2px 0; flex-wrap: wrap; }
     .legend-row .chip { display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:2px 8px; border-radius:999px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); }
+    .chip .swatch { width:12px; height:12px; border-radius:2px; display:inline-block; }
 
     .meta { color: #cbd5e1; font-size: 12px; }
 
     #icp-section { margin: 24px 16px; }
     #icp-section .section-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
 
-    #icp-grid { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+    #icp-fold-wrap { position: relative; }
+    #icp-scroll { overflow: hidden; transition: max-height .25s ease, margin-top .25s ease; }
+    #icp-fade { position:absolute; left:0; right:0; height:42px; bottom:0; background:linear-gradient(to bottom, rgba(15,23,42,0), rgba(15,23,42,.95)); pointer-events:none; display:none; }
+    #icp-expander { position:absolute; left:50%; transform:translateX(-50%); font-size:22px; font-weight:900; color:#fff; background:transparent; border:none; padding:0; cursor:pointer; z-index:10; user-select:none; }
 
-    @media (max-width: 980px){
-      #icp-grid{ grid-template-columns: 1fr; }
-    }
+    #icp-grid { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+    .icp-box { background: rgba(15,23,42,.40); border:1px solid rgba(255,255,255,.08); border-radius:8px; padding:10px; color:#e5e7eb; min-height:180px; }
+    .icp-title { font-weight:900; letter-spacing:.5px; margin:4px 0 10px; color:#ffffff; font-size:16px; }
+
+    .icp-card { background: rgba(255,255,255,.02); border:1px dashed rgba(255,255,255,.18); border-radius:8px; padding:10px; margin-bottom:10px; transition: border-color .15s ease, box-shadow .15s ease; }
+    .icp-card:hover { border-color:#ffffff; box-shadow: 0 0 0 1px #ffffff inset; }
+    .icp-card-title { font-weight:800; color:#93c5fd; margin-bottom:6px; font-size:14px; letter-spacing:.3px; }
+
+    .icp-box ul { list-style:none; margin:0; padding:0; }
+    .icp-box li { padding:4px 2px; border-bottom:1px dashed rgba(255,255,255,.08); font-size:13px; line-height:1.35; transition: transform .12s ease, font-weight .12s ease, color .12s ease; cursor:pointer; }
+    .icp-box li:hover { font-weight:800; transform: translateY(-1px); color:#ffffff; }
+    .icp-box .code { display:inline-block; min-width:52px; color:#fff; font-weight:700; }
+
+    .icp-note { display:none; }
+    @media (max-width: 980px){ #icp-grid{ grid-template-columns: 1fr; } }
   </style>
 </head>
 
 <body>
 
-  <!-- ✅ 安全版 header（不破壞功能） -->
-  <div class="header-bar">
-    <div></div>
+  /* <!-- ✅ 只包一層，不動原本 h1 -->
+  <div class="header-wrap">
     <h1 class="page-title">營收互動儀錶板</h1>
     <div class="data-source">資料來源：CMoney、Bloomberg</div>
   </div>
+
+ /* <!-- 以下全部完全不動 -->
 
   <section class="controls">
     <div class="field">
