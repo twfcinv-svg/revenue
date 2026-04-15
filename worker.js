@@ -15,7 +15,11 @@ self.onmessage = async function(e){
   // =========================
   // STEP 1：快速抓 months（先回 UI）
   // =========================
-  const headerRow = XLSX.utils.sheet_to_json(wsRev, { header:1 })[0] || [];
+  const headerRow = XLSX.utils.sheet_to_json(wsRev, {
+    header: 1,
+    raw: false,
+    defval: ''
+  })[0] || [];
   const found = new Set();
 
   for (const h of headerRow) {
