@@ -56,37 +56,31 @@ function colorFor(v, mode){ if(v == null || !isFinite(v)) return '#0f172a'; cons
 function safe(s){ return z(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function isUSCode(code){ return /\.US$/i.test(String(code || '').trim()); }
 
-window.addEventListener('DOMContentLoaded', async () => {
-  try {
+window.addEventListener('DOMContentLoaded', () => {
 
-    initControls(); // ⭐ UI 先出現（重點）
+  initControls(); // ⭐ 立刻顯示 loading dropdown
 
-    worker = new Worker('./worker.js');
+  worker = new Worker('./worker.js');
 
-    const res = await fetch(XLSX_FILE);
-    const buf = await res.arrayBuffer();
+  fetch(XLSX_FILE)
+    .then(res => res.arrayBuffer())
+    .then(buf => worker.postMessage({ buf }));
 
-    worker.postMessage({ buf });
+  worker.onmessage = (e) => {
+    if (e.data.type === 'ready') {
 
-    worker.onmessage = (e) => {
-      if (e.data.type === 'ready') {
-        const p = e.data.payload;
+      const p = e.data.payload;
 
-        revenueRows = p.revenueRows;
-        linksRows   = p.linksRows;
-        downRows    = p.downRows;
-        months      = p.months;
+      revenueRows = p.revenueRows;
+      linksRows   = p.linksRows;
+      downRows    = p.downRows;
+      months      = p.months;
 
-        DATA_READY = true;
+      updateControls(); // ⭐ 關鍵修復點
 
-        console.log("✅ Excel 背景載入完成");
-      }
-    };
-
-  } catch (e) {
-    console.error(e);
-    alert('載入失敗：' + e.message);
-  }
+      DATA_READY = true;
+    }
+  };
 
   document.querySelector('#runBtn')?.addEventListener('click', handleRun);
 });
@@ -191,6 +185,11 @@ async function loadWorkbook(){
 
 function initControls(){
   const sel = document.querySelector('#monthSelect');
+  sel.innerHTML = '<option>載入中...</option>';
+}
+
+function updateControls(){
+  const sel = document.querySelector('#monthSelect');
   sel.innerHTML = '';
 
   for (const m of months) {
@@ -200,8 +199,11 @@ function initControls(){
     sel.appendChild(o);
   }
 
-  if (!sel.value && months.length > 0) sel.value = months[0];
+  if (!sel.value && months.length > 0) {
+    sel.value = months[0];
+  }
 }
+
 
 function getMetricValue(row, month, metric){
   if (!row || !month || !metric) return null;
