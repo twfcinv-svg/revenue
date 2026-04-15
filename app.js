@@ -125,7 +125,8 @@ async function loadWorkbook(){
     }
   }
 
-  months = Array.from(found).sort((a, b) => b.localeCompare(a));
+ months = Array.from(found)
+  .sort((a, b) => Number(b) - Number(a));
 
   revenueRows = XLSX.utils.sheet_to_json(wsRev,   { defval:null });
   linksRows   = XLSX.utils.sheet_to_json(wsLinks, { defval:null });
