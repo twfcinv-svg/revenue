@@ -25,14 +25,44 @@ self.onmessage = async function(e){
 
   const found = new Set();
 
+self.onmessage = async function(e){
+  const { buf } = e.data;
+
+  const wb = XLSX.read(buf, { type:'array' });
+
+  const wsRev = wb.Sheets['Revenue'];
+  const wsLinks = wb.Sheets['Links'];
+  const wsDown = wb.Sheets['DownLinks'];
+
+  const revenueRows = XLSX.utils.sheet_to_json(wsRev, { defval:null });
+  const linksRows   = XLSX.utils.sheet_to_json(wsLinks, { defval:null });
+  const downRows    = wsDown ? XLSX.utils.sheet_to_json(wsDown, { defval:null }) : [];
+
+  const found = new Set();
+
+  const headerRow = XLSX.utils.sheet_to_json(wsRev, { header:1 })[0] || [];
+
   for (const h of headerRow) {
     if (!h) continue;
     const m = String(h).match(/(\d{4}).*?(\d{1,2})/);
     if (m) {
-      const ym = m[1] + String(m[2]).padStart(2,'0');
-      found.add(ym);
+      found.add(m[1] + String(m[2]).padStart(2,'0'));
     }
   }
+
+  const months = Array.from(found)
+    .sort((a, b) => Number(b) - Number(a));
+
+  self.postMessage({
+    type: 'ready',
+    payload: {
+      revenueRows,
+      linksRows,
+      downRows,
+      months
+    }
+  });
+};
 
   months = Array.from(found);
 
