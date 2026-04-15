@@ -213,12 +213,24 @@
   </main>
 
 
-  <script src='app.js?v='+VER></script>
-  <script src='stock-link-plugin.js?v='+VER></script>
-  <script src='app_query_link_B.js?v='+VER></script>
-  <script src='combo-chart.js?v='+VER></script>
-  <script src='treemap-tooltip.js?v='+VER></script>
-  <script src='industry-chain-panel.js?v='+VER></script>
+<script>
+  const VER = Date.now();
+
+  const scripts = [
+    'app.js',
+    'stock-link-plugin.js',
+    'app_query_link_B.js',
+    'combo-chart.js',
+    'treemap-tooltip.js',
+    'industry-chain-panel.js'
+  ];
+
+  scripts.forEach(src => {
+    const s = document.createElement('script');
+    s.src = `${src}?v=${VER}`;
+    document.body.appendChild(s);
+  });
+</script>
 
 
 </body>
