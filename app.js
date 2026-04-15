@@ -96,27 +96,27 @@ window.addEventListener('DOMContentLoaded', async () => {
   worker = new Worker('./worker.js');   // ① 先建立 worker
 
   // ⭐ ② 這裡設定 onmessage（一定要在 postMessage 前）
-  worker.onmessage = (e) => {
+worker.onmessage = (e) => {
 
-    if (e.data.type === 'months_ready') {
-      months = e.data.months;
-      updateControls();   // ⭐ 月份先出來
-    }
+  if (e.data.type === 'months_ready') {
+    months = e.data.months;
+    updateControls(); // ⭐ UI先出來
+  }
 
-    if (e.data.type === 'ready') {
-      const p = e.data.payload;
+  if (e.data.type === 'ready') {
+    const p = e.data.payload;
 
-      revenueRows = p.revenueRows;
-      linksRows   = p.linksRows;
-      downRows    = p.downRows;
-      months      = p.months;
+    revenueRows = p.revenueRows;
+    linksRows   = p.linksRows;
+    downRows    = p.downRows;
+    months      = p.months;
 
-      rebuildMaps();
-      updateControls();
+    rebuildMaps();   // ⭐ 全部在這裡建 index
+    updateControls();
 
-      DATA_READY = true;
-    }
-  };
+    DATA_READY = true;
+  }
+};
 
   // ③ 再送資料給 worker
   fetch(XLSX_FILE)
