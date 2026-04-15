@@ -98,9 +98,18 @@ window.addEventListener('DOMContentLoaded', async () => {
   // ⭐ ② 這裡設定 onmessage（一定要在 postMessage 前）
 worker.onmessage = (e) => {
 
+  console.log("worker msg:", e.data.type); // ⭐ debug用（一定要加）
+
   if (e.data.type === 'months_ready') {
-    months = e.data.months;
-    updateControls(); // ⭐ UI先出來
+
+    console.log("months received:", e.data.months);
+
+    months = e.data.months || [];
+
+    // ⚡ 強制延遲確保 DOM 已 ready
+    setTimeout(() => {
+      updateControls();
+    }, 0);
   }
 
   if (e.data.type === 'ready') {
@@ -111,8 +120,11 @@ worker.onmessage = (e) => {
     downRows    = p.downRows;
     months      = p.months;
 
-    rebuildMaps();   // ⭐ 全部在這裡建 index
-    updateControls();
+    rebuildMaps();
+
+    setTimeout(() => {
+      updateControls();
+    }, 0);
 
     DATA_READY = true;
   }
@@ -225,30 +237,29 @@ async function loadWorkbook(){
 }
 
 function updateControls(){
+
   const sel = document.querySelector('#monthSelect');
-  if (!sel) return;
 
-  sel.innerHTML = '';
-
-  if (!months || months.length === 0) {
-    const o = document.createElement('option');
-    o.textContent = '載入中...';
-    o.value = '';
-    sel.appendChild(o);
+  if (!sel) {
+    console.warn("monthSelect not found");
     return;
   }
 
-  // ✅ 重要：最新 → 最舊（你第1點需求）
-  const sorted = [...months].sort((a, b) => Number(b) - Number(a));
+  if (!months || months.length === 0) {
+    sel.innerHTML = `<option>載入中...</option>`;
+    return;
+  }
 
-  for (const m of sorted) {
+  sel.innerHTML = '';
+
+  for (const m of months) {
     const o = document.createElement('option');
     o.value = m;
     o.textContent = `${m.slice(0,4)}年${m.slice(4,6)}月`;
     sel.appendChild(o);
   }
 
-  sel.value = sorted[0];
+  sel.value = months[0]; // 最新月份
 }
 
 function rebuildMaps(){
