@@ -13,13 +13,9 @@ self.onmessage = async function(e){
   const wsDown  = wb.Sheets['DownLinks'];
 
   // =========================
-  // STEP 1：快速抓 months（先回 UI）
+  // STEP 1：months（快速）
   // =========================
-  const headerRow = XLSX.utils.sheet_to_json(wsRev, {
-    header: 1,
-    raw: false,
-    defval: ''
-  })[0] || [];
+  const headerRow = XLSX.utils.sheet_to_json(wsRev, { header:1 })[0] || [];
   const found = new Set();
 
   for (const h of headerRow) {
@@ -32,38 +28,21 @@ self.onmessage = async function(e){
 
   const months = Array.from(found).sort((a,b)=>Number(b)-Number(a));
 
-  // ⚡ 先讓 UI 出現（超重要）
+  // ⚡ 先回 UI
   self.postMessage({
     type: 'months_ready',
     months
   });
 
   // =========================
-  // STEP 2：慢處理（背景）
+  // STEP 2：只回 raw data（不建 map）
   // =========================
   const revenueRows = XLSX.utils.sheet_to_json(wsRev, { defval:null });
-  const linksRows    = XLSX.utils.sheet_to_json(wsLinks, { defval:null });
-  const downRows     = wsDown ? XLSX.utils.sheet_to_json(wsDown, { defval:null }) : [];
-
-  const byCode = new Map();
-  const byName = new Map();
-
-  for (const r of revenueRows) {
-    const code = normCode(
-      r['個股'] || r['代號'] || r['股票代碼'] ||
-      r['股票代號'] || r['公司代號'] || r['證券代號'] || ''
-    );
-
-    const name = normText(
-      r['名稱'] || r['公司名稱'] || r['證券名稱'] || ''
-    );
-
-    if (code) byCode.set(code, r);
-    if (name) byName.set(name, r);
-  }
+  const linksRows   = XLSX.utils.sheet_to_json(wsLinks, { defval:null });
+  const downRows    = wsDown ? XLSX.utils.sheet_to_json(wsDown, { defval:null }) : [];
 
   // =========================
-  // STEP 3：最後完整回傳
+  // STEP 3：回傳（完全不做加工）
   // =========================
   self.postMessage({
     type: 'ready',
