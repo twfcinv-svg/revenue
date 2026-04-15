@@ -98,33 +98,31 @@ window.addEventListener('DOMContentLoaded', async () => {
   // ⭐ ② 這裡設定 onmessage（一定要在 postMessage 前）
 worker.onmessage = (e) => {
 
-  console.log("worker msg:", e.data.type); // ⭐ debug用（一定要加）
+  console.log("worker msg:", e.data.type);
 
+  // =========================
+  // ⚡ 只處理 months（UI 立即更新）
+  // =========================
   if (e.data.type === 'months_ready') {
-
     console.log("months received:", e.data.months);
 
     months = e.data.months || [];
 
-    // ⚡ 強制延遲確保 DOM 已 ready
-    setTimeout(() => {
-      updateControls();
-    }, 0);
+    setTimeout(updateControls, 0);
+    return; // ⭐關鍵：避免掉進 ready
   }
 
+  // =========================
+  // ⚡ 完整資料 ready（不碰 UI）
+  // =========================
   if (e.data.type === 'ready') {
     const p = e.data.payload;
 
     revenueRows = p.revenueRows;
     linksRows   = p.linksRows;
     downRows    = p.downRows;
-    months      = p.months;
 
     rebuildMaps();
-
-    setTimeout(() => {
-      updateControls();
-    }, 0);
 
     DATA_READY = true;
   }
@@ -136,6 +134,8 @@ worker.onmessage = (e) => {
     .then(buf => worker.postMessage({ buf }));
 
   document.querySelector('#runBtn')?.addEventListener('click', handleRun);
+    // ⭐ 修法三：補保險（建議加這裡）
+  setTimeout(updateControls, 300);
 });
 
 
@@ -237,11 +237,12 @@ async function loadWorkbook(){
 }
 
 function updateControls(){
-
   const sel = document.querySelector('#monthSelect');
 
   if (!sel) {
-    console.warn("monthSelect not found");
+    console.warn("monthSelect not found → retry");
+
+    setTimeout(updateControls, 100); // ⭐關鍵補救
     return;
   }
 
@@ -259,7 +260,7 @@ function updateControls(){
     sel.appendChild(o);
   }
 
-  sel.value = months[0]; // 最新月份
+  sel.value = months[0];
 }
 
 function rebuildMaps(){
