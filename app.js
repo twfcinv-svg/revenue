@@ -91,37 +91,19 @@ async function loadCache(){
 
 window.addEventListener('DOMContentLoaded', async () => {
 
-  initControls(); // UI 先出現
+  initControls();
 
-  // 🟢 1. 先試 cache
-  const cached = await loadCache();
+  worker = new Worker('./worker.js');   // ① 先建立 worker
 
-  if (cached) {
-    console.log("⚡ 使用快取資料");
+  // ⭐ ② 這裡設定 onmessage（一定要在 postMessage 前）
+  worker.onmessage = (e) => {
 
-    revenueRows = cached.revenueRows;
-    linksRows   = cached.linksRows;
-    downRows    = cached.downRows;
-    months      = cached.months;
+    if (e.data.type === 'months_ready') {
+      months = e.data.months;
+      updateControls();   // ⭐ 月份先出來
+    }
 
-    rebuildMaps();   // ⭐ 重建 Map
-    updateControls();
-
-    DATA_READY = true;
-  }
-
-  // 🟡 2. background refresh Excel（更新 cache）
-  worker = new Worker('./worker.js');
-
-    fetch(XLSX_FILE)
-      .then(res => res.arrayBuffer())
-      .then(buf => {
-       worker.postMessage({ buf, mode: 'init' });
-    });
-
-  worker.onmessage = async (e) => {
     if (e.data.type === 'ready') {
-
       const p = e.data.payload;
 
       revenueRows = p.revenueRows;
@@ -133,18 +115,13 @@ window.addEventListener('DOMContentLoaded', async () => {
       updateControls();
 
       DATA_READY = true;
-
-      // ⭐ 存快取
-      await saveCache({
-        revenueRows,
-        linksRows,
-        downRows,
-        months
-      });
-
-      console.log("💾 cache updated");
     }
   };
+
+  // ③ 再送資料給 worker
+  fetch(XLSX_FILE)
+    .then(res => res.arrayBuffer())
+    .then(buf => worker.postMessage({ buf }));
 
   document.querySelector('#runBtn')?.addEventListener('click', handleRun);
 });
