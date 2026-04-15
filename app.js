@@ -39,10 +39,11 @@ const MIN_RENDER_H = 20;           // 個股最小高度（小於則不顯示）
 const MIN_RENDER_AREA = 400;       // 個股最小面積（小於則不顯示）
 
 let revenueRows = [], linksRows = [], downRows = [], months = [];
-let worker;
-let DATA_READY = false;
+
 let byCode = new Map();
 let byName = new Map();
+let worker;
+let DATA_READY = false;
 let linksByUp = new Map();
 let linksByDown = new Map();
 let downstreamHJ = [];
@@ -58,7 +59,7 @@ function isUSCode(code){ return /\.US$/i.test(String(code || '').trim()); }
 
 window.addEventListener('DOMContentLoaded', () => {
 
-  initControls(); // ⭐ 立刻顯示 loading dropdown
+  initControls(); // UI 先出現（載入中）
 
   worker = new Worker('./worker.js');
 
@@ -76,15 +77,27 @@ window.addEventListener('DOMContentLoaded', () => {
       downRows    = p.downRows;
       months      = p.months;
 
-      updateControls(); // ⭐ 關鍵修復點
+      // ⭐⭐⭐ 重要：重建 Map（修復查不到股票）
+      byCode.clear();
+      byName.clear();
+
+      for (const r of revenueRows) {
+        const code = normCode(r['個股'] || r['代號'] || r['股票代碼'] || '');
+        const name = normText(r['名稱'] || '');
+
+        if (code) byCode.set(code, r);
+        if (name) byName.set(name, r);
+      }
+
+      updateControls(); // 更新月份
 
       DATA_READY = true;
+      console.log("✅ Excel 載入完成");
     }
   };
 
   document.querySelector('#runBtn')?.addEventListener('click', handleRun);
 });
-
 
 
 async function loadWorkbook(){
@@ -184,9 +197,21 @@ async function loadWorkbook(){
   console.log("DownLinks 筆數 =", downstreamHJ.length);
 }
 
-function initControls(){
+function updateControls(){
   const sel = document.querySelector('#monthSelect');
-  sel.innerHTML = '<option>載入中...</option>';
+
+  sel.innerHTML = '';
+
+  for (const m of months) {
+    const o = document.createElement('option');
+    o.value = m;
+    o.textContent = `${m.slice(0,4)}年${m.slice(4,6)}月`;
+    sel.appendChild(o);
+  }
+
+  if (months.length > 0) {
+    sel.value = months[0];
+  }
 }
 
 function updateControls(){
