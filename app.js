@@ -100,21 +100,17 @@ worker.onmessage = (e) => {
 
   console.log("worker msg:", e.data.type);
 
-  // =========================
-  // ⚡ 只處理 months（UI 立即更新）
-  // =========================
   if (e.data.type === 'months_ready') {
-    console.log("months received:", e.data.months);
-
     months = e.data.months || [];
 
-    setTimeout(updateControls, 0);
-    return; // ⭐關鍵：避免掉進 ready
+    // ⚡ 等 DOM + controls 都 ready
+    setTimeout(() => {
+      updateControls();
+    }, 0);
+
+    return;
   }
 
-  // =========================
-  // ⚡ 完整資料 ready（不碰 UI）
-  // =========================
   if (e.data.type === 'ready') {
     const p = e.data.payload;
 
@@ -125,6 +121,10 @@ worker.onmessage = (e) => {
     rebuildMaps();
 
     DATA_READY = true;
+
+    setTimeout(() => {
+      updateControls();
+    }, 0);
   }
 };
 
