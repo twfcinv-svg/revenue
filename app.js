@@ -46,6 +46,7 @@ let byCode = new Map();
 let byName = new Map();
 let worker;
 let DATA_READY = false;
+let MONTHS_READY = false;
 let linksByUp = new Map();
 let linksByDown = new Map();
 let downstreamHJ = [];
@@ -102,12 +103,8 @@ worker.onmessage = (e) => {
 
   if (e.data.type === 'months_ready') {
     months = e.data.months || [];
-
-    // ⚡ 等 DOM + controls 都 ready
-    setTimeout(() => {
-      updateControls();
-    }, 0);
-
+    MONTHS_READY = true;
+    updateControls();
     return;
   }
 
@@ -119,12 +116,13 @@ worker.onmessage = (e) => {
     downRows    = p.downRows;
 
     rebuildMaps();
-
     DATA_READY = true;
 
-    setTimeout(() => {
+    if (MONTHS_READY) {
       updateControls();
-    }, 0);
+    }
+
+    return;
   }
 };
 
@@ -135,7 +133,7 @@ worker.onmessage = (e) => {
 
   document.querySelector('#runBtn')?.addEventListener('click', handleRun);
     // ⭐ 修法三：補保險（建議加這裡）
-  setTimeout(updateControls, 300);
+
 });
 
 
@@ -239,15 +237,9 @@ async function loadWorkbook(){
 function updateControls(){
   const sel = document.querySelector('#monthSelect');
 
-  console.log("months:", months);
+  if (!sel) return;
 
-  if (!sel) {
-    console.warn("monthSelect not found → retry");
-    setTimeout(updateControls, 100);
-    return;
-  }
-
-  if (!Array.isArray(months) || months.length === 0) {
+  if (!MONTHS_READY || !Array.isArray(months) || months.length === 0) {
     sel.innerHTML = `<option>載入中...</option>`;
     return;
   }
@@ -261,9 +253,7 @@ function updateControls(){
     sel.appendChild(o);
   }
 
-  setTimeout(() => {
-    sel.value = months[0];
-  }, 0);
+  sel.value = months[0];
 }
 
 function rebuildMaps(){
