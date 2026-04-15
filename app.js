@@ -47,6 +47,10 @@ let byName = new Map();
 let worker;
 let DATA_READY = false;
 let MONTHS_READY = false;
+function tryInitUI(){
+  if (!MONTHS_READY || !DATA_READY) return;
+  updateControls();
+}
 let linksByUp = new Map();
 let linksByDown = new Map();
 let downstreamHJ = [];
@@ -104,7 +108,7 @@ worker.onmessage = (e) => {
   if (e.data.type === 'months_ready') {
     months = e.data.months || [];
     MONTHS_READY = true;
-    updateControls();
+    tryInitUI();
     return;
   }
 
@@ -118,9 +122,7 @@ worker.onmessage = (e) => {
     rebuildMaps();
     DATA_READY = true;
 
-    if (MONTHS_READY) {
-      updateControls();
-    }
+    tryInitUI();
 
     return;
   }
