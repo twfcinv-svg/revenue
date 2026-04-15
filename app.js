@@ -39,6 +39,8 @@ const MIN_RENDER_H = 20;           // 個股最小高度（小於則不顯示）
 const MIN_RENDER_AREA = 400;       // 個股最小面積（小於則不顯示）
 
 let revenueRows = [], linksRows = [], downRows = [], months = [];
+let worker;
+let DATA_READY = false;
 let byCode = new Map();
 let byName = new Map();
 let linksByUp = new Map();
@@ -56,13 +58,36 @@ function isUSCode(code){ return /\.US$/i.test(String(code || '').trim()); }
 
 window.addEventListener('DOMContentLoaded', async () => {
   try {
-    await loadWorkbook();
-    initControls();
-    
+
+    initControls(); // ⭐ UI 先出現（重點）
+
+    worker = new Worker('./worker.js');
+
+    const res = await fetch(XLSX_FILE);
+    const buf = await res.arrayBuffer();
+
+    worker.postMessage({ buf });
+
+    worker.onmessage = (e) => {
+      if (e.data.type === 'ready') {
+        const p = e.data.payload;
+
+        revenueRows = p.revenueRows;
+        linksRows   = p.linksRows;
+        downRows    = p.downRows;
+        months      = p.months;
+
+        DATA_READY = true;
+
+        console.log("✅ Excel 背景載入完成");
+      }
+    };
+
   } catch (e) {
     console.error(e);
     alert('載入失敗：' + e.message);
   }
+
   document.querySelector('#runBtn')?.addEventListener('click', handleRun);
 });
 
@@ -232,6 +257,10 @@ function selectTreemapGroups(svgId, summaries){
 }
 
 function handleRun(){
+    if (!DATA_READY) {
+    alert("資料還在載入中，請稍等 1–3 秒");
+    return;
+  }
   const raw = document.querySelector('#stockInput').value;
   const month = (document.querySelector('#monthSelect')?.value) || '';
   const metric = (document.querySelector('#metricSelect')?.value) || 'MoM';
