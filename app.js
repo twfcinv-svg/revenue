@@ -239,6 +239,8 @@ async function loadWorkbook(){
 function updateControls(){
   const sel = document.querySelector('#monthSelect');
 
+  console.log("months:", months);
+
   if (!sel) {
     console.warn("monthSelect not found → retry");
     setTimeout(updateControls, 100);
@@ -259,7 +261,6 @@ function updateControls(){
     sel.appendChild(o);
   }
 
-  // ⭐延遲設定 value（重點修復）
   setTimeout(() => {
     sel.value = months[0];
   }, 0);
