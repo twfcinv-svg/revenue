@@ -113,9 +113,11 @@ window.addEventListener('DOMContentLoaded', async () => {
   // 🟡 2. background refresh Excel（更新 cache）
   worker = new Worker('./worker.js');
 
-  fetch(XLSX_FILE)
-    .then(res => res.arrayBuffer())
-    .then(buf => worker.postMessage({ buf }));
+    fetch(XLSX_FILE)
+      .then(res => res.arrayBuffer())
+      .then(buf => {
+       worker.postMessage({ buf, mode: 'init' });
+    });
 
   worker.onmessage = async (e) => {
     if (e.data.type === 'ready') {
@@ -247,35 +249,29 @@ async function loadWorkbook(){
 
 function updateControls(){
   const sel = document.querySelector('#monthSelect');
+  if (!sel) return;
 
   sel.innerHTML = '';
 
-  for (const m of months) {
+  if (!months || months.length === 0) {
+    const o = document.createElement('option');
+    o.textContent = '載入中...';
+    o.value = '';
+    sel.appendChild(o);
+    return;
+  }
+
+  // ✅ 重要：最新 → 最舊（你第1點需求）
+  const sorted = [...months].sort((a, b) => Number(b) - Number(a));
+
+  for (const m of sorted) {
     const o = document.createElement('option');
     o.value = m;
     o.textContent = `${m.slice(0,4)}年${m.slice(4,6)}月`;
     sel.appendChild(o);
   }
 
-  if (months.length > 0) {
-    sel.value = months[0];
-  }
-}
-
-function updateControls(){
-  const sel = document.querySelector('#monthSelect');
-  sel.innerHTML = '';
-
-  for (const m of months) {
-    const o = document.createElement('option');
-    o.value = m;
-    o.textContent = `${m.slice(0,4)}年${m.slice(4,6)}月`;
-    sel.appendChild(o);
-  }
-
-  if (!sel.value && months.length > 0) {
-    sel.value = months[0];
-  }
+  sel.value = sorted[0];
 }
 
 function rebuildMaps(){
@@ -295,6 +291,11 @@ function rebuildMaps(){
     if (code) byCode.set(code, r);
     if (name) byName.set(name, r);
   }
+    // ✅ 加這行（超重要）
+  console.log("✔ rebuildMaps 完成", {
+    byCodeSize: byCode.size,
+    byNameSize: byName.size
+  });
 }
 
 
@@ -366,7 +367,7 @@ function handleRun(){
     return;
   }
 
-  let codeKey = normCode(raw);
+  let codeKey = normCode(String(raw).toUpperCase());
   let rowSelf = byCode.get(codeKey);
 
   if (!rowSelf) {
