@@ -11,6 +11,8 @@
  *  I) 上游 Treemap 依各類股平均營收表現排序，只保留前 GROUP_KEEP_MAX 個類股
  */
 
+
+
 const URL_VER = new URLSearchParams(location.search).get('v') || Date.now();
 const XLSX_FILE = new URL(`./data.xlsx?v=${URL_VER}`, location.href).toString();
 const REVENUE_SHEET = 'Revenue';
@@ -56,18 +58,66 @@ function displayPct(v){ if(v == null || !isFinite(v)) return '—'; const s = v.
 function colorFor(v, mode){ if(v == null || !isFinite(v)) return '#0f172a'; const t = Math.min(1, Math.abs(v)/80); const alpha = 0.25 + 0.35*t; const good = (mode === 'greenPositive'); const pos = good ? '156,163,175' : '59,130,246'; const neg = good ? '59,130,246' : '156,163,175'; const rgb = (v >= 0) ? pos : neg; return `rgba(${rgb},${alpha})`; }
 function safe(s){ return z(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function isUSCode(code){ return /\.US$/i.test(String(code || '').trim()); }
+const DB_NAME = "revenue_cache";
+const STORE = "data";
 
-window.addEventListener('DOMContentLoaded', () => {
+function openDB(){
+  return new Promise((resolve) => {
+    const req = indexedDB.open(DB_NAME, 1);
 
-  initControls(); // UI 先出現（載入中）
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(STORE);
+    };
 
+    req.onsuccess = () => resolve(req.result);
+  });
+}
+
+async function saveCache(data){
+  const db = await openDB();
+  const tx = db.transaction(STORE, "readwrite");
+  tx.objectStore(STORE).put(data, "main");
+}
+
+async function loadCache(){
+  const db = await openDB();
+  const tx = db.transaction(STORE, "readonly");
+  const req = tx.objectStore(STORE).get("main");
+
+  return new Promise(resolve => {
+    req.onsuccess = () => resolve(req.result);
+  });
+}
+
+window.addEventListener('DOMContentLoaded', async () => {
+
+  initControls(); // UI 先出現
+
+  // 🟢 1. 先試 cache
+  const cached = await loadCache();
+
+  if (cached) {
+    console.log("⚡ 使用快取資料");
+
+    revenueRows = cached.revenueRows;
+    linksRows   = cached.linksRows;
+    downRows    = cached.downRows;
+    months      = cached.months;
+
+    rebuildMaps();   // ⭐ 重建 Map
+    updateControls();
+
+    DATA_READY = true;
+  }
+
+  // 🟡 2. background refresh Excel（更新 cache）
   worker = new Worker('./worker.js');
 
   fetch(XLSX_FILE)
     .then(res => res.arrayBuffer())
     .then(buf => worker.postMessage({ buf }));
 
-  worker.onmessage = (e) => {
+  worker.onmessage = async (e) => {
     if (e.data.type === 'ready') {
 
       const p = e.data.payload;
@@ -77,22 +127,20 @@ window.addEventListener('DOMContentLoaded', () => {
       downRows    = p.downRows;
       months      = p.months;
 
-      // ⭐⭐⭐ 重要：重建 Map（修復查不到股票）
-      byCode.clear();
-      byName.clear();
-
-      for (const r of revenueRows) {
-        const code = normCode(r['個股'] || r['代號'] || r['股票代碼'] || '');
-        const name = normText(r['名稱'] || '');
-
-        if (code) byCode.set(code, r);
-        if (name) byName.set(name, r);
-      }
-
-      updateControls(); // 更新月份
+      rebuildMaps();
+      updateControls();
 
       DATA_READY = true;
-      console.log("✅ Excel 載入完成");
+
+      // ⭐ 存快取
+      await saveCache({
+        revenueRows,
+        linksRows,
+        downRows,
+        months
+      });
+
+      console.log("💾 cache updated");
     }
   };
 
@@ -227,6 +275,25 @@ function updateControls(){
 
   if (!sel.value && months.length > 0) {
     sel.value = months[0];
+  }
+}
+
+function rebuildMaps(){
+  byCode.clear();
+  byName.clear();
+
+  for (const r of revenueRows) {
+    const code = normCode(
+      r['個股'] || r['代號'] || r['股票代碼'] ||
+      r['股票代號'] || r['公司代號'] || r['證券代號'] || ''
+    );
+
+    const name = normText(
+      r['名稱'] || r['公司名稱'] || r['證券名稱'] || ''
+    );
+
+    if (code) byCode.set(code, r);
+    if (name) byName.set(name, r);
   }
 }
 
