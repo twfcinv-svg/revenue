@@ -241,12 +241,11 @@ function updateControls(){
 
   if (!sel) {
     console.warn("monthSelect not found → retry");
-
-    setTimeout(updateControls, 100); // ⭐關鍵補救
+    setTimeout(updateControls, 100);
     return;
   }
 
-  if (!months || months.length === 0) {
+  if (!Array.isArray(months) || months.length === 0) {
     sel.innerHTML = `<option>載入中...</option>`;
     return;
   }
@@ -260,7 +259,10 @@ function updateControls(){
     sel.appendChild(o);
   }
 
-  sel.value = months[0];
+  // ⭐延遲設定 value（重點修復）
+  setTimeout(() => {
+    sel.value = months[0];
+  }, 0);
 }
 
 function rebuildMaps(){
