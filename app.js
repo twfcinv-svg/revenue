@@ -16,6 +16,7 @@ const XLSX_FILE = new URL(`./data.xlsx?v=${URL_VER}`, location.href).toString();
 const REVENUE_SHEET = 'Revenue';
 const LINKS_SHEET   = 'Links';
 const DOWNLINKS_SHEET = 'DownLinks';
+const NEWHIGH_SHEET   = '創新高';
 
 const CODE_FIELDS = ['個股','代號','股票代碼','股票代號','公司代號','證券代號'];
 const NAME_FIELDS = ['名稱','公司名稱','證券名稱'];
@@ -39,6 +40,7 @@ const MIN_RENDER_H = 20;           // 個股最小高度（小於則不顯示）
 const MIN_RENDER_AREA = 400;       // 個股最小面積（小於則不顯示）
 
 let revenueRows = [], linksRows = [], downRows = [], months = [];
+let newHighSheetRows = [];
 let byCode = new Map();
 let byName = new Map();
 let linksByUp = new Map();
@@ -58,6 +60,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   try {
     await loadWorkbook();
     initControls();
+    renderNewHighSummary(); 
     
   } catch (e) {
     console.error(e);
@@ -78,6 +81,7 @@ async function loadWorkbook(){
   const wsRev = wb.Sheets[REVENUE_SHEET];
   const wsLinks = wb.Sheets[LINKS_SHEET];
   const wsDown = wb.Sheets[DOWNLINKS_SHEET];
+  const wsNewHigh = wb.Sheets[NEWHIGH_SHEET];
 
   if (!wsRev || !wsLinks) throw new Error('找不到必要工作表 Revenue 或 Links');
 
@@ -111,6 +115,9 @@ async function loadWorkbook(){
   revenueRows = XLSX.utils.sheet_to_json(wsRev,   { defval:null });
   linksRows   = XLSX.utils.sheet_to_json(wsLinks, { defval:null });
   downRows    = wsDown ? XLSX.utils.sheet_to_json(wsDown, { defval:null }) : [];
+  newHighSheetRows = wsNewHigh
+  ? XLSX.utils.sheet_to_json(wsNewHigh, { header: 1, defval: '', blankrows: false, raw: false })
+  : [];
 
   byCode.clear();
   byName.clear();
@@ -908,4 +915,154 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
   };
 
   window.addEventListener('resize', onResize, { passive:true });
+}
+
+function toNum(v){
+  if (v == null || v === '') return null;
+  if (typeof v === 'string') {
+    v = v.replace(/[%％,\s]/g, '').trim();
+  }
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function getLatestMonthLabel(){
+  const m = months && months.length ? months[0] : '';
+  return m ? `${m.slice(0,4)}/${m.slice(4,6)}` : '最新月';
+}
+
+function extractNewHighRecords(){
+  if (!Array.isArray(newHighSheetRows) || newHighSheetRows.length === 0) return [];
+
+  const out = [];
+
+  for (const row of newHighSheetRows) {
+    // 依你指定欄位：
+    // A=0 股票代號
+    // B=1 股票名稱
+    // F=5 最新月 MoM
+    // G=6 最新月 YoY
+    // N=13 是否創新高（A）
+    // O=14 產業類別
+    const code = normCode(row[0]);
+    const name = normText(row[1]);
+    const mom  = toNum(row[5]);
+    const yoy  = toNum(row[6]);
+    const flag = normText(row[13]).toUpperCase();
+    const industry = normText(row[14]) || '未分類';
+
+    // 略過前面說明列 / 標題列
+    if (!code || !name) continue;
+    if (code === '股票代號' || name === '股票名稱') continue;
+
+    // 只保留 N欄 = A
+    if (flag !== 'A') continue;
+
+    out.push({
+      code,
+      name,
+      mom,
+      yoy,
+      industry
+    });
+  }
+
+  return out;
+}
+
+function groupAndSortNewHighRecords(records){
+  const groups = new Map();
+
+  for (const r of records) {
+    if (!groups.has(r.industry)) groups.set(r.industry, []);
+    groups.get(r.industry).push(r);
+  }
+
+  const result = [...groups.entries()].map(([industry, list]) => {
+    // 同產業內排序：先 YoY 高到低，再 MoM 高到低，再代號
+    list.sort((a, b) => {
+      const yoyA = Number.isFinite(a.yoy) ? a.yoy : -Infinity;
+      const yoyB = Number.isFinite(b.yoy) ? b.yoy : -Infinity;
+      if (yoyB !== yoyA) return yoyB - yoyA;
+
+      const momA = Number.isFinite(a.mom) ? a.mom : -Infinity;
+      const momB = Number.isFinite(b.mom) ? b.mom : -Infinity;
+      if (momB !== momA) return momB - momA;
+
+      return a.code.localeCompare(b.code, 'zh-Hant');
+    });
+
+    return { industry, list };
+  });
+
+  // 產業排序：創新高家數多的排前面
+  result.sort((a, b) => {
+    if (b.list.length !== a.list.length) return b.list.length - a.list.length;
+    return a.industry.localeCompare(b.industry, 'zh-Hant');
+  });
+
+  return result;
+}
+
+function renderNewHighSummary(){
+  const host = document.getElementById('newHighTableWrap');
+  const titleEl = document.getElementById('newHighTitle');
+  const metaEl = document.getElementById('newHighMeta');
+
+  if (!host) return;
+
+  const records = extractNewHighRecords();
+  const groups = groupAndSortNewHighRecords(records);
+  const latestMonthLabel = getLatestMonthLabel();
+
+  if (titleEl) {
+    titleEl.textContent = `${latestMonthLabel} 營收創新高個股彙整`;
+  }
+
+  if (!records.length) {
+    if (metaEl) metaEl.textContent = '沒有符合條件的資料';
+    host.innerHTML = `<div class="new-high-empty">最新月份沒有營收創新高個股資料。</div>`;
+    return;
+  }
+
+  if (metaEl) {
+    metaEl.textContent = `共 ${records.length} 檔｜${groups.length} 個產業類別`;
+  }
+
+  const bodyHtml = groups.map(g => {
+    const groupHeader = `
+      <tr class="group-row">
+        <td colspan="5">${safe(g.industry)}（${g.list.length} 檔）</td>
+      </tr>
+    `;
+
+    const rowsHtml = g.list.map(r => `
+      <tr>
+        <td>${safe(r.industry)}</td>
+        <td class="code">${safe(r.code)}</td>
+        <td class="name">${safe(r.name)}</td>
+        <td class="num">${displayPct(r.mom)}</td>
+        <td class="num">${displayPct(r.yoy)}</td>
+      </tr>
+    `).join('');
+
+    return groupHeader + rowsHtml;
+  }).join('');
+
+  host.innerHTML = `
+    <table class="new-high-table">
+      <thead>
+        <tr>
+          <th>產業類別</th>
+          <th>股票代號</th>
+          <th>股票名稱</th>
+          <th>MoM</th>
+          <th>YoY</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${bodyHtml}
+      </tbody>
+    </table>
+  `;
 }
