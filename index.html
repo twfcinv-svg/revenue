@@ -124,6 +124,113 @@
     }
     /* ====== ✅ 新增結束 ====== */
 
+    /* ====== 最新月營收創新高彙整 ====== */
+  .new-high-panel {
+    margin-top: 16px;
+    margin-left: auto;         /* 靠右 */
+    width: min(58%, 100%);     /* 右下角視覺 */
+    background: rgba(15,23,42,.40);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 10px;
+    padding: 12px;
+    color: #e5e7eb;
+  }
+
+  .new-high-head {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+
+  .new-high-head h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 900;
+    letter-spacing: .3px;
+    color: #ffffff;
+  }
+
+  .new-high-table-wrap {
+    max-height: 360px;
+    overflow: auto;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 8px;
+    background: rgba(2,6,23,.35);
+  }
+
+  .new-high-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 620px;
+    font-size: 13px;
+    color: #e5e7eb;
+  }
+
+  .new-high-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #0f172a;
+    color: #cbd5e1;
+    text-align: left;
+    font-weight: 800;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255,255,255,.12);
+    white-space: nowrap;
+  }
+
+  .new-high-table tbody td {
+    padding: 8px 12px;
+    border-bottom: 1px dashed rgba(255,255,255,.08);
+    vertical-align: middle;
+  }
+
+  .new-high-table tbody tr:hover td {
+    background: rgba(255,255,255,.03);
+  }
+
+  .new-high-table .group-row td {
+    background: rgba(59,130,246,.12);
+    color: #dbeafe;
+    font-weight: 900;
+    border-bottom: 1px solid rgba(59,130,246,.18);
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .new-high-table td.code {
+    font-weight: 800;
+    color: #ffffff;
+    white-space: nowrap;
+  }
+
+  .new-high-table td.name {
+    white-space: nowrap;
+  }
+
+  .new-high-table td.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .new-high-empty {
+    padding: 14px 12px;
+    color: #cbd5e1;
+    font-size: 13px;
+  }
+
+  @media (max-width: 980px){
+    .new-high-panel {
+      width: 100%;
+      margin-left: 0;
+    }
+  }
+    
+
     #icp-section { margin: 24px 16px; }
     #icp-section .section-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
 
@@ -239,6 +346,13 @@
       </div>
       <div class="chart-wrap"><svg id="comboChart"></svg></div>
       <div id="comboHint" class="meta" style="display:none"></div>
+        <div id="newHighSection" class="new-high-panel">
+       <div class="new-high-head">
+         <h3 id="newHighTitle">最新月營收創新高個股彙整</h3>
+         <div id="newHighMeta" class="meta"></div>
+       </div>
+       <div id="newHighTableWrap" class="new-high-table-wrap"></div>
+      </div>
     </section>
   </main>
 
