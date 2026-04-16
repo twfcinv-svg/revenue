@@ -724,7 +724,7 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
   const groupSummaries = selectTreemapGroups(svgId, allSummaries);
 
   if (groupSummaries.length === 0) {
-    hint.textContent = '此區在選定月份沒有符合條件的類股';
+    hint.textContent = '';
     return;
   }
 
