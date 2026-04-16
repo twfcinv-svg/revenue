@@ -47,6 +47,9 @@ let byName = new Map();
 let worker;
 let DATA_READY = false;
 let MONTHS_READY = false;
+function initControls(){
+  console.log("初始化 UI 控制項");
+}
 function tryInitUI(){
   if (MONTHS_READY) updateControls();
 }
@@ -104,13 +107,16 @@ worker.onmessage = (e) => {
 
   console.log("worker msg:", e.data.type);
 
+  // ⭐ 1️⃣ 月份先初始化 UI（重點）
   if (e.data.type === 'months_ready') {
     months = e.data.months || [];
     MONTHS_READY = true;
-    updateControls();   // 直接更新
+
+    updateControls();   // ✅ 直接更新 dropdown（不要等）
     return;
   }
 
+  // ⭐ 2️⃣ 資料初始化（查詢用）
   if (e.data.type === 'ready') {
     const p = e.data.payload;
 
@@ -119,9 +125,10 @@ worker.onmessage = (e) => {
     downRows    = p.downRows;
 
     rebuildMaps();
+
     DATA_READY = true;
 
-    tryInitUI();
+    console.log("✅ DATA_READY 完成");
 
     return;
   }
@@ -238,9 +245,12 @@ async function loadWorkbook(){
 function updateControls(){
   const sel = document.querySelector('#monthSelect');
 
-  if (!sel) return;
+  if (!sel) {
+    console.error("❌ 找不到 #monthSelect");
+    return;
+  }
 
-  if (!MONTHS_READY || !Array.isArray(months) || months.length === 0) {
+  if (!Array.isArray(months) || months.length === 0) {
     sel.innerHTML = `<option>載入中...</option>`;
     return;
   }
@@ -255,6 +265,8 @@ function updateControls(){
   }
 
   sel.value = months[0];
+
+  console.log("✅ 月份下拉完成", months);
 }
 
 function rebuildMaps(){
