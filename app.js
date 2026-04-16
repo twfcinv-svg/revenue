@@ -728,13 +728,6 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
     return;
   }
 
-  if (svgId === 'upTreemap') {
-    hint.textContent =
-      '已顯示上游平均' + metric + '最佳的 ' + groupSummaries.length + ' 個類股：' +
-      groupSummaries.map(g => `${g.rel}（${displayPct(g.avg)}）`).join('、');
-  } else {
-    hint.textContent = '';
-  }
 
   let groupWeights = new Map();
 
