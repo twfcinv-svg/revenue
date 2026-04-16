@@ -980,24 +980,27 @@ function groupAndSortNewHighRecords(records){
 
   const result = [...groups.entries()].map(([industry, list]) => {
     // 同產業內排序：先 YoY 高到低，再 MoM 高到低，再代號
-    list.sort((a, b) => {
-      const yoyA = Number.isFinite(a.yoy) ? a.yoy : -Infinity;
-      const yoyB = Number.isFinite(b.yoy) ? b.yoy : -Infinity;
-      if (yoyB !== yoyA) return yoyB - yoyA;
-
-      const momA = Number.isFinite(a.mom) ? a.mom : -Infinity;
-      const momB = Number.isFinite(b.mom) ? b.mom : -Infinity;
-      if (momB !== momA) return momB - momA;
-
-      return a.code.localeCompare(b.code, 'zh-Hant');
-    });
+  list.sort((a, b) => {
+    return a.code.localeCompare(b.code, 'zh-Hant');
+  });
 
     return { industry, list };
   });
 
   // 產業排序：創新高家數多的排前面
   result.sort((a, b) => {
-    if (b.list.length !== a.list.length) return b.list.length - a.list.length;
+    const tail = ['未分類-傳產', '未分類-電子'];
+
+    const aTail = tail.includes(a.industry);
+    const bTail = tail.includes(b.industry);
+
+    if (aTail && !bTail) return 1;
+    if (!aTail && bTail) return -1;
+
+    if (b.list.length !== a.list.length) {
+      return b.list.length - a.list.length;
+    }
+
     return a.industry.localeCompare(b.industry, 'zh-Hant');
   });
 
@@ -1052,10 +1055,47 @@ function renderNewHighSummary(){
       </section>
     `;
   }).join('');
+  const tableHtml = `
+  <table class="new-high-table">
+    <thead>
+      <tr>
+        <th>代號</th>
+        <th>名稱</th>
+        <th>MoM</th>
+        <th>YoY</th>
+        <th>產業</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${g.list.map(r => `
+        <tr>
+          <td class="code link" data-code="${safe(r.code)}">${safe(r.code)}</td>
+          <td class="name link" data-code="${safe(r.code)}">${safe(r.name)}</td>
+          <td class="num">${displayPct(r.mom)}</td>
+          <td class="num">${displayPct(r.yoy)}</td>
+          <td>${safe(r.industry)}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+`;
 
   host.innerHTML = `
     <div class="industry-card-wrap">
       ${cardsHtml}
     </div>
   `;
+
+  host.querySelectorAll('.new-high-table .link').forEach(el => {
+  el.addEventListener('click', () => {
+    const code = el.dataset.code;
+    if (!code) return;
+
+    const input = document.querySelector('#stockInput');
+    if (input) {
+      input.value = code;
+      handleRun();
+    }
+  });
+});
 }
