@@ -50,7 +50,7 @@ function toHalfWidth(str){ return z(str).replace(/[０-９Ａ-Ｚａ-ｚ]/g, ch 
 function normText(s){ return z(s).replace(/[\u200B-\u200D\uFEFF]/g,'').replace(/[\u3000]/g,' ').replace(/\s+/g,' ').trim(); }
 function normCode(s){ return toHalfWidth(z(s)).replace(/[\u200B-\u200D\uFEFF]/g,'').replace(/\s+/g,'').trim(); }
 function displayPct(v){ if(v == null || !isFinite(v)) return '—'; const s = v.toFixed(1) + '%'; return v > 0 ? ('+' + s) : s; }
-function colorFor(v, mode){ if(v == null || !isFinite(v)) return '#0f172a'; const t = Math.min(1, Math.abs(v)/80); const alpha = 0.25 + 0.35*t; const good = (mode === 'greenPositive'); const pos = good ? '59,130,246' : '156,163,175'; const neg = good ? '156,163,175' : '59,130,246'; const rgb = (v >= 0) ? pos : neg; return `rgba(${rgb},${alpha})`; }
+function colorFor(v, mode){ if(v == null || !isFinite(v)) return '#0f172a'; const t = Math.min(1, Math.abs(v)/80); const alpha = 0.25 + 0.35*t; const good = (mode === 'greenPositive'); const pos = good ? '156,163,175' : '59,130,246'; const neg = good ? '59,130,246' : '156,163,175'; const rgb = (v >= 0) ? pos : neg; return `rgba(${rgb},${alpha})`; }
 function safe(s){ return z(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function isUSCode(code){ return /\.US$/i.test(String(code || '').trim()); }
 
