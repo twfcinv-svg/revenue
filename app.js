@@ -38,6 +38,8 @@ const ENABLE_NODE_CLICK = true;    // 點方塊可重新查詢
 const MIN_RENDER_W = 75;           // 個股最小寬度（小於則不顯示）
 const MIN_RENDER_H = 20;           // 個股最小高度（小於則不顯示）
 const MIN_RENDER_AREA = 400;       // 個股最小面積（小於則不顯示）
+const NEWHIGH_COLLAPSE_AFTER = 15; // 營收創新高表格，預設先顯示前 15 檔
+
 
 let revenueRows = [], linksRows = [], downRows = [], months = [];
 let newHighSheetRows = [];
@@ -979,15 +981,18 @@ function groupAndSortNewHighRecords(records){
   }
 
   const result = [...groups.entries()].map(([industry, list]) => {
-    // 同產業內排序：先 YoY 高到低，再 MoM 高到低，再代號
-  list.sort((a, b) => {
-    return a.code.localeCompare(b.code, 'zh-Hant');
-  });
+    // 同產業內：改成依個股代號排序
+    list.sort((a, b) => {
+      return String(a.code).localeCompare(String(b.code), 'zh-Hant', { numeric: true });
+    });
 
     return { industry, list };
   });
 
-  // 產業排序：創新高家數多的排前面
+  // 產業排序：
+  // 1. 先把「未分類-傳產 / 未分類-電子」放最後
+  // 2. 其他依家數多到少
+  // 3. 同家數再依產業名稱排序
   result.sort((a, b) => {
     const tail = ['未分類-傳產', '未分類-電子'];
 
@@ -1010,12 +1015,12 @@ function groupAndSortNewHighRecords(records){
 function renderNewHighSummary(){
   const host = document.getElementById('newHighTableWrap');
   const titleEl = document.getElementById('newHighTitle');
-  const metaEl  = document.getElementById('newHighMeta');
+  const metaEl = document.getElementById('newHighMeta');
 
   if (!host) return;
 
   const records = extractNewHighRecords();
-  const groups  = groupAndSortNewHighRecords(records);
+  const groups = groupAndSortNewHighRecords(records);
   const latestMonthLabel = getLatestMonthLabel();
 
   if (titleEl) {
@@ -1032,70 +1037,106 @@ function renderNewHighSummary(){
     metaEl.textContent = `共 ${records.length} 檔｜${groups.length} 個產業類別`;
   }
 
-  // ===== 產業卡片 =====
-  const cardsHtml = groups.map(g => {
-    const itemsHtml = g.list.map(r => `
-      <li class="stock-item">
-        <span class="code">${safe(r.code)}</span>
-        <span class="name">${safe(r.name)}</span>
-        <span class="mom">${displayPct(r.mom)}</span>
-        <span class="yoy">${displayPct(r.yoy)}</span>
-      </li>
-    `).join('');
+  let visibleStockCount = 0;
+  const bodyRows = [];
 
-    return `
-      <section class="industry-card">
-        <header class="industry-header">
-          <h3>${safe(g.industry)}</h3>
-          <span class="count">${g.list.length} 檔</span>
-        </header>
-        <ul class="stock-list">
-          ${itemsHtml}
-        </ul>
-      </section>
-    `;
-  }).join('');
-  const tableHtml = `
-  <table class="new-high-table">
-    <thead>
-      <tr>
-        <th>代號</th>
-        <th>名稱</th>
-        <th>MoM</th>
-        <th>YoY</th>
-        <th>產業</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${g.list.map(r => `
-        <tr>
-          <td class="code link" data-code="${safe(r.code)}">${safe(r.code)}</td>
-          <td class="name link" data-code="${safe(r.code)}">${safe(r.name)}</td>
+  for (const g of groups) {
+    const groupStartVisibleCount = visibleStockCount;
+
+    const stockRowsHtml = g.list.map(r => {
+      visibleStockCount += 1;
+      const isExtraRow = visibleStockCount > NEWHIGH_COLLAPSE_AFTER;
+
+      return `
+        <tr class="stock-row ${isExtraRow ? 'extra-row' : ''}">
+          <td class="code">
+            <button type="button" class="stock-link" data-code="${safe(r.code)}">${safe(r.code)}</button>
+          </td>
+          <td class="name">
+            <button type="button" class="stock-link" data-code="${safe(r.code)}">${safe(r.name)}</button>
+          </td>
           <td class="num">${displayPct(r.mom)}</td>
           <td class="num">${displayPct(r.yoy)}</td>
           <td>${safe(r.industry)}</td>
         </tr>
-      `).join('')}
-    </tbody>
-  </table>
-`;
+      `;
+    }).join('');
+
+    // 如果這個產業的第一檔股票就已經超過 15 檔，代表整個產業群組都屬於可折疊區
+    const groupRowExtra = groupStartVisibleCount >= NEWHIGH_COLLAPSE_AFTER;
+
+    const groupHeaderHtml = `
+      <tr class="group-row ${groupRowExtra ? 'extra-row' : ''}">
+        <td colspan="5">${safe(g.industry)}（${g.list.length} 檔）</td>
+      </tr>
+    `;
+
+    bodyRows.push(groupHeaderHtml + stockRowsHtml);
+  }
+
+  const hasCollapsedRows = records.length > NEWHIGH_COLLAPSE_AFTER;
 
   host.innerHTML = `
-    <div class="industry-card-wrap">
-      ${cardsHtml}
+    <div class="new-high-table-wrap">
+      <table class="new-high-table">
+        <thead>
+          <tr>
+            <th>個股代號</th>
+            <th>個股名稱</th>
+            <th>MoM</th>
+            <th>YoY</th>
+            <th>個股產業類別</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${bodyRows.join('')}
+        </tbody>
+      </table>
+
+      ${hasCollapsedRows ? `
+        <div class="new-high-toggle-wrap">
+          <button type="button" id="newHighToggleBtn" class="new-high-toggle-btn">
+            ＋ 顯示其餘 ${records.length - NEWHIGH_COLLAPSE_AFTER} 檔
+          </button>
+        </div>
+      ` : ''}
     </div>
   `;
 
-  host.querySelectorAll('.new-high-table .link').forEach(el => {
-  el.addEventListener('click', () => {
-    const code = el.dataset.code;
-    if (!code) return;
-
-    const input = document.querySelector('#stockInput');
-    if (input) {
-      input.value = code;
-      handleRun();
-    }
+  // 預設先把第 15 檔之後的資料藏起來
+  host.querySelectorAll('.extra-row').forEach(row => {
+    row.style.display = 'none';
   });
-});
+
+  // 代號 / 名稱點擊後，帶入查詢（與左邊供應鏈 click 行為一致）
+  host.querySelectorAll('.stock-link').forEach(el => {
+    el.addEventListener('click', () => {
+      const code = el.dataset.code;
+      if (!code) return;
+
+      const input = document.querySelector('#stockInput');
+      if (input) {
+        input.value = code;
+        handleRun();
+      }
+    });
+  });
+
+  // 整體表格展開 / 收合
+  const toggleBtn = host.querySelector('#newHighToggleBtn');
+  if (toggleBtn) {
+    let expanded = false;
+
+    toggleBtn.addEventListener('click', () => {
+      expanded = !expanded;
+
+      host.querySelectorAll('.extra-row').forEach(row => {
+        row.style.display = expanded ? '' : 'none';
+      });
+
+      toggleBtn.textContent = expanded
+        ? '－ 收合'
+        : `＋ 顯示其餘 ${records.length - NEWHIGH_COLLAPSE_AFTER} 檔`;
+    });
+  }
 }
