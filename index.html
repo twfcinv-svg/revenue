@@ -86,6 +86,50 @@
 
     .meta { color: #cbd5e1; font-size: 12px; }
 
+      /* ====== ✅ 新增：上下游熱力圖 legend 樣式 ====== */
+    .section-head .legend {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .section-head .legend .chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      line-height: 1.2;
+      letter-spacing: .2px;
+      background: transparent;
+      border: 1px solid currentColor;
+      font-weight: 700;   /* 👈 這裡控制預設粗細 */
+    }
+
+    .section-head .legend .pos-chip {
+      color: #ff4d4f;                 /* 👈 表現佳 顏色 */
+      border-color: #ff4d4f;
+      background: rgba(255, 77, 79, .08);
+      font-weight: 800;               /* 👈 表現佳 粗細 */
+    }
+
+    .section-head .legend .neu-chip {
+      color: #93a4bf;                 /* 👈 中性 / 適中 顏色 */
+      border-color: #93a4bf;
+      background: rgba(147, 164, 191, .08);
+      font-weight: 600;               /* 👈 中性 / 適中 粗細 */
+    }
+
+    .section-head .legend .neg-chip {
+      color: #00c48c;                 /* 👈 表現弱 顏色 */
+      border-color: #00c48c;
+      background: rgba(0, 196, 140, .08);
+      font-weight: 800;               /* 👈 表現弱 粗細 */
+    }
+    /* ====== ✅ 新增結束 ====== */
+
     #icp-section { margin: 24px 16px; }
     #icp-section .section-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
 
