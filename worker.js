@@ -13,6 +13,7 @@ const DOWNLINKS_SHEET = 'DownLinks';
 function z(s) {
   return String(s == null ? '' : s);
 }
+
 function normText(s) {
   return z(s)
     .replace(/[\u200B-\u200D\uFEFF]/g, '')
@@ -69,7 +70,7 @@ function ensureXLSX(candidates = []) {
       importScripts(url);
       if (self.XLSX) return true;
     } catch (_) {
-      // continue
+      // 繼續嘗試下一個路徑
     }
   }
 
@@ -133,7 +134,9 @@ self.onmessage = function (e) {
     // 再完整轉資料
     const revenueRows = self.XLSX.utils.sheet_to_json(wsRev, { defval: null });
     const linksRows = self.XLSX.utils.sheet_to_json(wsLinks, { defval: null });
-    const downRows = wsDown ? self.XLSX.utils.sheet_to_json(wsDown, { defval: null }) : [];
+    const downRows = wsDown
+      ? self.XLSX.utils.sheet_to_json(wsDown, { defval: null })
+      : [];
 
     self.postMessage({
       type: 'ready',
