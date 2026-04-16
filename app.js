@@ -1007,12 +1007,12 @@ function groupAndSortNewHighRecords(records){
 function renderNewHighSummary(){
   const host = document.getElementById('newHighTableWrap');
   const titleEl = document.getElementById('newHighTitle');
-  const metaEl = document.getElementById('newHighMeta');
+  const metaEl  = document.getElementById('newHighMeta');
 
   if (!host) return;
 
   const records = extractNewHighRecords();
-  const groups = groupAndSortNewHighRecords(records);
+  const groups  = groupAndSortNewHighRecords(records);
   const latestMonthLabel = getLatestMonthLabel();
 
   if (titleEl) {
@@ -1029,40 +1029,33 @@ function renderNewHighSummary(){
     metaEl.textContent = `共 ${records.length} 檔｜${groups.length} 個產業類別`;
   }
 
-  const bodyHtml = groups.map(g => {
-    const groupHeader = `
-      <tr class="group-row">
-        <td colspan="5">${safe(g.industry)}（${g.list.length} 檔）</td>
-      </tr>
-    `;
-
-    const rowsHtml = g.list.map(r => `
-      <tr>
-        <td>${safe(r.industry)}</td>
-        <td class="code">${safe(r.code)}</td>
-        <td class="name">${safe(r.name)}</td>
-        <td class="num">${displayPct(r.mom)}</td>
-        <td class="num">${displayPct(r.yoy)}</td>
-      </tr>
+  // ===== 產業卡片 =====
+  const cardsHtml = groups.map(g => {
+    const itemsHtml = g.list.map(r => `
+      <li class="stock-item">
+        <span class="code">${safe(r.code)}</span>
+        <span class="name">${safe(r.name)}</span>
+        <span class="mom">${displayPct(r.mom)}</span>
+        <span class="yoy">${displayPct(r.yoy)}</span>
+      </li>
     `).join('');
 
-    return groupHeader + rowsHtml;
+    return `
+      <section class="industry-card">
+        <header class="industry-header">
+          <h3>${safe(g.industry)}</h3>
+          <span class="count">${g.list.length} 檔</span>
+        </header>
+        <ul class="stock-list">
+          ${itemsHtml}
+        </ul>
+      </section>
+    `;
   }).join('');
 
   host.innerHTML = `
-    <table class="new-high-table">
-      <thead>
-        <tr>
-          <th>產業類別</th>
-          <th>股票代號</th>
-          <th>股票名稱</th>
-          <th>MoM</th>
-          <th>YoY</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${bodyHtml}
-      </tbody>
-    </table>
+    <div class="industry-card-wrap">
+      ${cardsHtml}
+    </div>
   `;
 }
