@@ -1,85 +1,27 @@
+
 <!doctype html>
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>營收互動儀錶板｜供應鏈月營收熱力圖（診斷版）</title>
-
   <script>
-    // ★ 固定版本號：只有你真的更新資源時，再手動修改即可
-    window.APP_ASSET_VERSION = '20260416-1';
-    window.APP_VER = new URLSearchParams(location.search).get('v') || window.APP_ASSET_VERSION;
-
-    document.write('<link rel="stylesheet" href="styles.css?v=' + window.APP_VERhref="fix-align.css?v=' + window.APP_VER + '  <!-- 建議你根目錄有一份 xlsx.full.min.js，穩定性會比只靠 CDN 更好 -->
+    const VER = new URLSearchParams(location.search).get('v') || Date.now();
+    document.write('<link rel="stylesheet" href="styles.css?v='+VER+'">');
+    // ✅ 新增：載入對齊修正用 CSS（含 --icp-nudge-top / --icp-nudge-bottom）
+    document.write('<link rel="stylesheet" href="fix-align.css?v='+VER+'">');
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
-  <!-- D3 -->
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
-
   <style>
     body { margin: 0; }
-
-    /* ✅ 安全置中 header（不動原本 class） */
-    .header-wrap {
-      position: relative;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      padding: 20px 16px 10px;
-    }
-
-    .header-wrap .page-title {
-      margin: 16px 16px 8px;
-    }
-
-    /* ✅ 右上角資料來源（不影響 layout） */
-    .data-source {
-      position: absolute;
-      right: 16px;
-      top: 50%;
-      transform: translateY(-50%);
-      font-size: 12px;
-      color: #cbd5e1;
-    }
-
-    .header-title-group {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      line-height: 1.1;
-    }
-
-    /* 副標（變精緻） */
-    .sub-title {
-      color: #38bdf8;
-      font-size: 20px;
-      font-weight: 800;
-      letter-spacing: 2px;
-      margin-bottom: -8px;
-      opacity: 0.9;
-    }
-
-    /* 主標（變主角） */
-    .page-title {
-      margin: 0;
-      font-weight: 800;
-      font-size: 32px;
-      letter-spacing: 2px;
-      color: #ffffff;
-    }
-
+    .page-title { margin: 16px 16px 8px; font-weight: 700; font-size: 30px; line-height: 1.25; color: #fff; }
     .controls { margin: 8px 16px 12px; }
     .layout { margin: 0 16px 24px; }
 
     .chart-section { margin: 8px 0 24px; }
-    .chart-wrap {
-      background: rgba(15,23,42,.35);
-      border: 1px solid rgba(255,255,255,.08);
-      border-radius: 8px;
-      padding: 8px 8px 2px;
-    }
+    .chart-wrap { background: rgba(15,23,42,.35); border: 1px solid rgba(255,255,255,.08); border-radius: 8px; padding: 8px 8px 2px; }
     #comboChart { width: 100%; height: 380px; display: block; }
-
     .axis path, .axis line { stroke: rgba(255,255,255,.15); }
     .axis text { fill: #e5e7eb; font-size: 12px; }
     .x.axis text { transform: translateY(4px); }
@@ -90,176 +32,48 @@
     .line-mom { fill: none; stroke: #f4d03f; stroke-width: 2px; }
     .line-yoy { fill: none; stroke: #00d8d6; stroke-width: 2px; }
     .zero-line { stroke: rgba(255,255,255,.25); stroke-dasharray: 4 4; }
-
-    .legend-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      color: #e5e7eb;
-      margin: 6px 2px 0;
-      flex-wrap: wrap;
-    }
-
-    .legend-row .chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      padding: 2px 8px;
-      border-radius: 999px;
-      background: rgba(255,255,255,.08);
-      border: 1px solid rgba(255,255,255,.12);
-    }
-
-    .chip .swatch {
-      width: 12px;
-      height: 12px;
-      border-radius: 2px;
-      display: inline-block;
-    }
-
+    .legend-row { display: flex; align-items:center; gap:12px; color:#e5e7eb; margin: 6px 2px 0; flex-wrap: wrap; }
+    .legend-row .chip { display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:2px 8px; border-radius:999px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); }
+    .chip .swatch { width:12px; height:12px; border-radius:2px; display:inline-block; }
     .meta { color: #cbd5e1; font-size: 12px; }
 
     #icp-section { margin: 24px 16px; }
-    #icp-section .section-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 8px;
-    }
+    #icp-section .section-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
 
     #icp-fold-wrap { position: relative; }
-    #icp-scroll {
-      overflow: hidden;
-      transition: max-height .25s ease, margin-top .25s ease;
-    }
-    #icp-fade {
-      position: absolute;
-      left: 0;
-      right: 0;
-      height: 42px;
-      bottom: 0;
-      background: linear-gradient(to bottom, rgba(15,23,42,0), rgba(15,23,42,.95));
-      pointer-events: none;
-      display: none;
-    }
-    #icp-expander {
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 22px;
-      font-weight: 900;
-      color: #fff;
-      background: transparent;
-      border: none;
-      padding: 0;
-      cursor: pointer;
-      z-index: 10;
-      user-select: none;
-    }
+    #icp-scroll { overflow: hidden; transition: max-height .25s ease, margin-top .25s ease; }
+    #icp-fade { position:absolute; left:0; right:0; height:42px; bottom:0; background:linear-gradient(to bottom, rgba(15,23,42,0), rgba(15,23,42,.95)); pointer-events:none; display:none; }
+    #icp-expander { position:absolute; left:50%; transform:translateX(-50%); font-size:22px; font-weight:900; color:#fff; background:transparent; border:none; padding:0; cursor:pointer; z-index:10; user-select:none; }
 
-    #icp-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-    }
+    #icp-grid { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+    .icp-box { background: rgba(15,23,42,.40); border:1px solid rgba(255,255,255,.08); border-radius:8px; padding:10px; color:#e5e7eb; min-height:180px; }
+    .icp-title { font-weight:900; letter-spacing:.5px; margin:4px 0 10px; color:#ffffff; font-size:16px; }
 
-    .icp-box {
-      background: rgba(15,23,42,.40);
-      border: 1px solid rgba(255,255,255,.08);
-      border-radius: 8px;
-      padding: 10px;
-      color: #e5e7eb;
-      min-height: 180px;
-    }
+    .icp-card { background: rgba(255,255,255,.02); border:1px dashed rgba(255,255,255,.18); border-radius:8px; padding:10px; margin-bottom:10px; transition: border-color .15s ease, box-shadow .15s ease; }
+    .icp-card:hover { border-color:#ffffff; box-shadow: 0 0 0 1px #ffffff inset; }
+    .icp-card-title { font-weight:800; color:#93c5fd; margin-bottom:6px; font-size:14px; letter-spacing:.3px; }
 
-    .icp-title {
-      font-weight: 900;
-      letter-spacing: .5px;
-      margin: 4px 0 10px;
-      color: #ffffff;
-      font-size: 16px;
-    }
+    .icp-box ul { list-style:none; margin:0; padding:0; }
+    .icp-box li { padding:4px 2px; border-bottom:1px dashed rgba(255,255,255,.08); font-size:13px; line-height:1.35; transition: transform .12s ease, font-weight .12s ease, color .12s ease; cursor:pointer; }
+    .icp-box li:hover { font-weight:800; transform: translateY(-1px); color:#ffffff; }
+    .icp-box .code { display:inline-block; min-width:52px; color:#fff; font-weight:700; }
 
-    .icp-card {
-      background: rgba(255,255,255,.02);
-      border: 1px dashed rgba(255,255,255,.18);
-      border-radius: 8px;
-      padding: 10px;
-      margin-bottom: 10px;
-      transition: border-color .15s ease, box-shadow .15s ease;
-    }
-
-    .icp-card:hover {
-      border-color: #ffffff;
-      box-shadow: 0 0 0 1px #ffffff inset;
-    }
-
-    .icp-card-title {
-      font-weight: 800;
-      color: #93c5fd;
-      margin-bottom: 6px;
-      font-size: 14px;
-      letter-spacing: .3px;
-    }
-
-    .icp-box ul { list-style: none; margin: 0; padding: 0; }
-
-    .icp-box li {
-      padding: 4px 2px;
-      border-bottom: 1px dashed rgba(255,255,255,.08);
-      font-size: 13px;
-      line-height: 1.35;
-      transition: transform .12s ease, font-weight .12s ease, color .12s ease;
-      cursor: pointer;
-    }
-
-    .icp-box li:hover {
-      font-weight: 800;
-      transform: translateY(-1px);
-      color: #ffffff;
-    }
-
-    .icp-box .code {
-      display: inline-block;
-      min-width: 52px;
-      color: #fff;
-      font-weight: 700;
-    }
-
-    .icp-note { display: none; }
-
-    @media (max-width: 980px) {
-      #icp-grid { grid-template-columns: 1fr; }
-    }
+    .icp-note { display:none; }
+    @media (max-width: 980px){ #icp-grid{ grid-template-columns: 1fr; } }
   </style>
 </head>
-
 <body>
+  <h1 class="page-title">營收互動儀錶板</h1>
 
-  <!-- header -->
-  <div class="header-wrap">
-    <div class="header-title-group">
-      <div class="sub-title">富邦投顧</div>
-      <h1 class="page-title">營收儀錶板</h1>
-    </div>
-    <div class="data-source">資料來源：CMoney、Bloomberg</div>
-  </div>
-
-  <!-- controls -->
   <section class="controls">
     <div class="field">
       <label for="stockInput">股票代號 / 名稱</label>
       <input id="stockInput" type="text" placeholder="例如：2330 或 台積電" />
     </div>
-
     <div class="field">
       <label for="monthSelect">月份</label>
-      <select id="monthSelect">
-        <option value="">載入中...</option>
-      </select>
+      <select id="monthSelect"></select>
     </div>
-
     <div class="field">
       <label for="metricSelect">指標</label>
       <select id="metricSelect">
@@ -267,13 +81,11 @@
         <option value="MoM">月變動 (MoM)</option>
       </select>
     </div>
-
-    <button id="runBtn" class="primary" type="button">查詢</button>
+    <button id="runBtn" class="primary">查詢</button>
     <div id="resultChip" class="result-chip" aria-live="polite"></div>
     <span id="status" class="status" style="margin-left:8px"></span>
   </section>
 
-  <!-- main -->
   <main class="layout">
     <section class="column" id="upstreamCol">
       <div class="section-head">
@@ -302,11 +114,7 @@
     </section>
 
     <section id="icp-section">
-      <div class="section-head">
-        <h2>個股產業鏈</h2>
-        <div class="icp-note"></div>
-      </div>
-
+      <div class="section-head"><h2>個股產業鏈</h2><div class="icp-note"></div></div>
       <div id="icp-fold-wrap">
         <div id="icp-scroll">
           <div id="icp-grid">
@@ -314,14 +122,12 @@
               <div class="icp-title">上游供應鏈</div>
               <div id="icp-up-wrap"></div>
             </aside>
-
             <aside class="icp-box">
               <div class="icp-title">下游客戶</div>
               <div id="icp-down-wrap"></div>
             </aside>
           </div>
         </div>
-
         <div id="icp-fade"></div>
         <div id="icp-expander" aria-expanded="false" role="button" title="展開/收合">＋</div>
       </div>
@@ -341,45 +147,14 @@
     </section>
   </main>
 
-  <script>
-    // ★ 依序載入，避免 script 非同步導致相依性問題
-    (async function () {
-      const ver = window.APP_VER || '20260416-1';
 
-      const scripts = [
-        'app.js',
-        'stock-link-plugin.js',
-        'app_query_link_B.js',
-        'combo-chart.js',
-        'treemap-tooltip.js',
-        'industry-chain-panel.js'
-      ];
+  <script src='app.js?v='+VER></script>
+  <script src='stock-link-plugin.js?v='+VER></script>
+  <script src='app_query_link_B.js?v='+VER></script>
+  <script src='combo-chart.js?v='+VER></script>
+  <script src='treemap-tooltip.js?v='+VER></script>
+  <script src='industry-chain-panel.js?v='+VER></script>
 
-      function loadScriptSequential(src) {
-        return new Promise((resolve, reject) => {
-          const s = document.createElement('script');
-          s.src = `${src}?v=${ver}`;
-          s.async = false;
-          s.onload = resolve;
-          s.onerror = () => reject(new Error(`載入失敗：${src}`));
-          document.body.appendChild(s);
-        });
-      }
 
-      try {
-        for (const src of scripts) {
-          await loadScriptSequential(src);
-        }
-        console.log('✅ 所有腳本已依序載入完成');
-      } catch (err) {
-        console.error(err);
-        const status = document.getElementById('status');
-        if (status) {
-          status.textContent = '腳本載入失敗，請檢查檔案是否都已上傳';
-          status.style.color = '#fca5a5';
-        }
-      }
-    })();
-  </script>
 </body>
 </html>
