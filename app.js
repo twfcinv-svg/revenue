@@ -954,17 +954,15 @@ function ensureNewHighTableStyles(){
       width: 18% !important;
     }
     #newHighTableWrap .new-high-table col.col-name {
-      width: 22% !important;
-    }
-    #newHighTableWrap .new-high-table col.col-mom {
-      width: 15% !important;
-    }
-    #newHighTableWrap .new-high-table col.col-yoy {
-      width: 15% !important;
-    }
-    #newHighTableWrap .new-high-table col.col-industry {
       width: 30% !important;
     }
+    #newHighTableWrap .new-high-table col.col-mom {
+      width: 26% !important;
+    }
+    #newHighTableWrap .new-high-table col.col-yoy {
+      width: 26% !important;
+    }
+
 
     #newHighTableWrap .new-high-table thead th,
     #newHighTableWrap .new-high-table tbody td {
@@ -991,8 +989,7 @@ function ensureNewHighTableStyles(){
 
     /* 文字欄位：統一靠左 */
     #newHighTableWrap .new-high-table tbody td.code,
-    #newHighTableWrap .new-high-table tbody td.name,
-    #newHighTableWrap .new-high-table tbody td.industry {
+    #newHighTableWrap .new-high-table tbody td.name {
       text-align: left !important;
     }
 
@@ -1177,14 +1174,13 @@ function renderNewHighSummary(){
           </td>
           <td class="num">${displayPct(r.mom)}</td>
           <td class="num">${displayPct(r.yoy)}</td>
-          <td class="industry">${safe(r.industry)}</td>
         </tr>
       `;
     }).join('');
 
     const groupHeaderHtml = `
       <tr class="group-row" data-industry="${safe(g.industry)}">
-        <td colspan="5">
+        <td colspan="4">
           <span
             class="group-toggle"
             data-industry="${safe(g.industry)}"
@@ -1206,7 +1202,6 @@ function renderNewHighSummary(){
           <col class="col-name">
           <col class="col-mom">
           <col class="col-yoy">
-          <col class="col-industry">
         </colgroup>
         <thead>
           <tr>
@@ -1214,7 +1209,6 @@ function renderNewHighSummary(){
             <th class="th-name">個股名稱</th>
             <th class="th-num">MoM</th>
             <th class="th-num">YoY</th>
-            <th class="th-industry">個股產業類別</th>
           </tr>
         </thead>
         <tbody>
