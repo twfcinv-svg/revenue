@@ -954,13 +954,13 @@ function ensureNewHighTableStyles(){
       width: 18% !important;
     }
     #newHighTableWrap .new-high-table col.col-name {
-      width: 30% !important;
+      width: 25% !important;
     }
     #newHighTableWrap .new-high-table col.col-mom {
-      width: 26% !important;
+      width: 18% !important;
     }
     #newHighTableWrap .new-high-table col.col-yoy {
-      width: 26% !important;
+      width: 18% !important;
     }
 
 
