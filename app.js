@@ -1048,12 +1048,13 @@ function renderNewHighSummary(){
       const isExtraRow = visibleStockCount > NEWHIGH_COLLAPSE_AFTER;
 
       return `
-        <tr class="stock-row ${isExtraRow ? 'extra-row' : ''}">
+        <tr class="stock-row ${isExtraRow ? 'extra-row' : ''}" data-industry="${safe(g.industry)}">
+          
           <td class="code">
-            <button type="button" class="stock-link" data-code="${safe(r.code)}">${safe(r.code)}</button>
+            <span class="stock-link" data-code="${safe(r.code)}">${safe(r.code)}</span>
           </td>
           <td class="name">
-            <button type="button" class="stock-link" data-code="${safe(r.code)}">${safe(r.name)}</button>
+            <span class="stock-link" data-code="${safe(r.code)}">${safe(r.name)}</span>
           </td>
           <td class="num">${displayPct(r.mom)}</td>
           <td class="num">${displayPct(r.yoy)}</td>
@@ -1066,10 +1067,14 @@ function renderNewHighSummary(){
     const groupRowExtra = groupStartVisibleCount >= NEWHIGH_COLLAPSE_AFTER;
 
     const groupHeaderHtml = `
-      <tr class="group-row ${groupRowExtra ? 'extra-row' : ''}">
-        <td colspan="5">${safe(g.industry)}（${g.list.length} 檔）</td>
+      <tr class="group-row">
+        <td colspan="5">
+          <span class="group-toggle" data-industry="${safe(g.industry)}">＋</span>
+          ${safe(g.industry)}（${g.list.length} 檔）
+        </td>
       </tr>
     `;
+
 
     bodyRows.push(groupHeaderHtml + stockRowsHtml);
   }
@@ -1094,11 +1099,6 @@ function renderNewHighSummary(){
       </table>
 
       ${hasCollapsedRows ? `
-        <div class="new-high-toggle-wrap">
-          <button type="button" id="newHighToggleBtn" class="new-high-toggle-btn">
-            ＋ 顯示其餘 ${records.length - NEWHIGH_COLLAPSE_AFTER} 檔
-          </button>
-        </div>
       ` : ''}
     </div>
   `;
@@ -1109,34 +1109,21 @@ function renderNewHighSummary(){
   });
 
   // 代號 / 名稱點擊後，帶入查詢（與左邊供應鏈 click 行為一致）
-  host.querySelectorAll('.stock-link').forEach(el => {
-    el.addEventListener('click', () => {
-      const code = el.dataset.code;
-      if (!code) return;
+  host.querySelectorAll('.group-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const industry = btn.dataset.industry;
+      const rows = host.querySelectorAll(
+        `.stock-row[data-industry="${CSS.escape(industry)}"]`
+      );
 
-      const input = document.querySelector('#stockInput');
-      if (input) {
-        input.value = code;
-        handleRun();
-      }
+      const collapsed = btn.textContent === '＋';
+      btn.textContent = collapsed ? '－' : '＋';
+
+      rows.forEach(r => {
+        r.style.display = collapsed ? '' : 'none';
+      });
     });
   });
 
-  // 整體表格展開 / 收合
-  const toggleBtn = host.querySelector('#newHighToggleBtn');
-  if (toggleBtn) {
-    let expanded = false;
 
-    toggleBtn.addEventListener('click', () => {
-      expanded = !expanded;
-
-      host.querySelectorAll('.extra-row').forEach(row => {
-        row.style.display = expanded ? '' : 'none';
-      });
-
-      toggleBtn.textContent = expanded
-        ? '－ 收合'
-        : `＋ 顯示其餘 ${records.length - NEWHIGH_COLLAPSE_AFTER} 檔`;
-    });
-  }
 }
