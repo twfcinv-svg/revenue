@@ -930,7 +930,12 @@ function toNum(v){
 
 function getLatestMonthLabel(){
   const m = months && months.length ? months[0] : '';
-  return m ? `${m.slice(0,4)}/${m.slice(4,6)}` : '最新月';
+  if (!m) return '最新月份';
+
+  const year = m.slice(0, 4);
+  const month = String(Number(m.slice(4, 6))); // 去掉前導 0，例如 03 -> 3
+
+  return `${year}年${month}月`;
 }
 
 function extractNewHighRecords(){
@@ -1084,22 +1089,26 @@ function renderNewHighSummary(){
   host.innerHTML = `
     <div class="new-high-table-wrap">
       <table class="new-high-table">
+        <colgroup>
+          <col class="col-code">
+          <col class="col-name">
+          <col class="col-mom">
+          <col class="col-yoy">
+          <col class="col-industry">
+        </colgroup>
         <thead>
           <tr>
-            <th>個股代號</th>
-            <th>個股名稱</th>
-            <th>MoM</th>
-            <th>YoY</th>
-            <th>個股產業類別</th>
+            <th class="th-code">個股代號</th>
+            <th class="th-name">個股名稱</th>
+            <th class="th-num">MoM</th>
+            <th class="th-num">YoY</th>
+            <th class="th-industry">個股產業類別</th>
           </tr>
         </thead>
         <tbody>
           ${bodyRows.join('')}
         </tbody>
       </table>
-
-      ${hasCollapsedRows ? `
-      ` : ''}
     </div>
   `;
 
