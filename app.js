@@ -938,6 +938,117 @@ function getLatestMonthLabel(){
   return `${year}年${month}月`;
 }
 
+function ensureNewHighTableStyles(){
+  if (document.getElementById('newHighTableInlineStyle')) return;
+
+  const style = document.createElement('style');
+  style.id = 'newHighTableInlineStyle';
+  style.textContent = `
+    #newHighTableWrap .new-high-table {
+      width: 100% !important;
+      border-collapse: collapse !important;
+      table-layout: fixed !important;
+    }
+
+    #newHighTableWrap .new-high-table col.col-code {
+      width: 18% !important;
+    }
+    #newHighTableWrap .new-high-table col.col-name {
+      width: 22% !important;
+    }
+    #newHighTableWrap .new-high-table col.col-mom {
+      width: 15% !important;
+    }
+    #newHighTableWrap .new-high-table col.col-yoy {
+      width: 15% !important;
+    }
+    #newHighTableWrap .new-high-table col.col-industry {
+      width: 30% !important;
+    }
+
+    #newHighTableWrap .new-high-table thead th,
+    #newHighTableWrap .new-high-table tbody td {
+      padding: 10px 14px !important;
+      vertical-align: middle !important;
+      box-sizing: border-box !important;
+    }
+
+    /* 表頭 */
+    #newHighTableWrap .new-high-table thead th {
+      color: #dbeafe !important;
+      font-weight: 600 !important;
+      text-align: left !important;
+      white-space: nowrap !important;
+      border-bottom: 1px solid rgba(255,255,255,0.10) !important;
+    }
+
+    /* 數值欄位：表頭與內容統一靠右 */
+    #newHighTableWrap .new-high-table thead th.th-num,
+    #newHighTableWrap .new-high-table tbody td.num {
+      text-align: right !important;
+      font-variant-numeric: tabular-nums !important;
+    }
+
+    /* 文字欄位：統一靠左 */
+    #newHighTableWrap .new-high-table tbody td.code,
+    #newHighTableWrap .new-high-table tbody td.name,
+    #newHighTableWrap .new-high-table tbody td.industry {
+      text-align: left !important;
+    }
+
+    /* 每個欄位中間加淡白線 */
+    #newHighTableWrap .new-high-table thead th + th,
+    #newHighTableWrap .new-high-table tbody td + td {
+      border-left: 1px solid rgba(255,255,255,0.07) !important;
+    }
+
+    /* 每列底部淡線 */
+    #newHighTableWrap .new-high-table tbody tr.stock-row td {
+      border-bottom: 1px dashed rgba(255,255,255,0.05) !important;
+    }
+
+    /* 產業標題列 */
+    #newHighTableWrap .new-high-table tbody tr.group-row td {
+      background: rgba(37, 99, 235, 0.12) !important;
+      color: #eaf2ff !important;
+      font-weight: 600 !important;
+      border-top: 1px solid rgba(255,255,255,0.06) !important;
+      border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+      padding: 9px 14px !important;
+    }
+
+    /* 股票可點擊文字 */
+    #newHighTableWrap .stock-link {
+      display: inline-block !important;
+      color: #f8fafc !important;
+      cursor: pointer !important;
+      text-decoration: none !important;
+      line-height: 1.2 !important;
+    }
+
+    #newHighTableWrap .stock-link:hover {
+      color: #93c5fd !important;
+      text-decoration: underline !important;
+    }
+
+    /* 群組 +/- 按鈕 */
+    #newHighTableWrap .group-toggle {
+      display: inline-flex !important;
+      width: 14px !important;
+      justify-content: center !important;
+      align-items: center !important;
+      margin-right: 8px !important;
+      cursor: pointer !important;
+      color: #cfe3ff !important;
+      user-select: none !important;
+      font-weight: 700 !important;
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+
 function extractNewHighRecords(){
   if (!Array.isArray(newHighSheetRows) || newHighSheetRows.length === 0) return [];
 
@@ -1024,6 +1135,9 @@ function renderNewHighSummary(){
 
   if (!host) return;
 
+  // 先確保樣式已經注入
+  ensureNewHighTableStyles();
+
   const records = extractNewHighRecords();
   const groups = groupAndSortNewHighRecords(records);
   const latestMonthLabel = getLatestMonthLabel();
@@ -1047,6 +1161,7 @@ function renderNewHighSummary(){
 
   for (const g of groups) {
     const groupStartVisibleCount = visibleStockCount;
+    const groupInitiallyExpanded = groupStartVisibleCount < NEWHIGH_COLLAPSE_AFTER;
 
     const stockRowsHtml = g.list.map(r => {
       visibleStockCount += 1;
@@ -1054,7 +1169,6 @@ function renderNewHighSummary(){
 
       return `
         <tr class="stock-row ${isExtraRow ? 'extra-row' : ''}" data-industry="${safe(g.industry)}">
-          
           <td class="code">
             <span class="stock-link" data-code="${safe(r.code)}">${safe(r.code)}</span>
           </td>
@@ -1063,28 +1177,26 @@ function renderNewHighSummary(){
           </td>
           <td class="num">${displayPct(r.mom)}</td>
           <td class="num">${displayPct(r.yoy)}</td>
-          <td>${safe(r.industry)}</td>
+          <td class="industry">${safe(r.industry)}</td>
         </tr>
       `;
     }).join('');
 
-    // 如果這個產業的第一檔股票就已經超過 15 檔，代表整個產業群組都屬於可折疊區
-    const groupRowExtra = groupStartVisibleCount >= NEWHIGH_COLLAPSE_AFTER;
-
     const groupHeaderHtml = `
-      <tr class="group-row">
+      <tr class="group-row" data-industry="${safe(g.industry)}">
         <td colspan="5">
-          <span class="group-toggle" data-industry="${safe(g.industry)}">＋</span>
+          <span
+            class="group-toggle"
+            data-industry="${safe(g.industry)}"
+            data-expanded="${groupInitiallyExpanded ? 'true' : 'false'}"
+          >${groupInitiallyExpanded ? '－' : '＋'}</span>
           ${safe(g.industry)}（${g.list.length} 檔）
         </td>
       </tr>
     `;
 
-
     bodyRows.push(groupHeaderHtml + stockRowsHtml);
   }
-
-  const hasCollapsedRows = records.length > NEWHIGH_COLLAPSE_AFTER;
 
   host.innerHTML = `
     <div class="new-high-table-wrap">
@@ -1117,22 +1229,37 @@ function renderNewHighSummary(){
     row.style.display = 'none';
   });
 
-  // 代號 / 名稱點擊後，帶入查詢（與左邊供應鏈 click 行為一致）
+  // 股票代號 / 名稱點擊後，帶入查詢
+  host.querySelectorAll('.stock-link').forEach(el => {
+    el.addEventListener('click', () => {
+      const code = el.dataset.code;
+      if (!code) return;
+
+      const input = document.querySelector('#stockInput');
+      if (input) {
+        input.value = code;
+        handleRun();
+      }
+    });
+  });
+
+  // 每個產業自己的展開 / 收合
   host.querySelectorAll('.group-toggle').forEach(btn => {
     btn.addEventListener('click', () => {
       const industry = btn.dataset.industry;
+      const expanded = btn.dataset.expanded === 'true';
+
       const rows = host.querySelectorAll(
         `.stock-row[data-industry="${CSS.escape(industry)}"]`
       );
 
-      const collapsed = btn.textContent === '＋';
-      btn.textContent = collapsed ? '－' : '＋';
+      const nextExpanded = !expanded;
+      btn.dataset.expanded = nextExpanded ? 'true' : 'false';
+      btn.textContent = nextExpanded ? '－' : '＋';
 
-      rows.forEach(r => {
-        r.style.display = collapsed ? '' : 'none';
+      rows.forEach(row => {
+        row.style.display = nextExpanded ? '' : 'none';
       });
     });
   });
-
-
 }
