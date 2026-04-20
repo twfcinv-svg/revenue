@@ -38,7 +38,7 @@ const ENABLE_NODE_CLICK = true;    // 點方塊可重新查詢
 const MIN_RENDER_W = 75;           // 個股最小寬度（小於則不顯示）
 const MIN_RENDER_H = 20;           // 個股最小高度（小於則不顯示）
 const MIN_RENDER_AREA = 400;       // 個股最小面積（小於則不顯示）
-const NEWHIGH_COLLAPSE_AFTER = 15; // 營收創新高表格，預設先顯示前 15 檔
+const NEWHIGH_COLLAPSE_AFTER = 0; // 營收創新高表格，預設先顯示前 15 檔
 
 
 let revenueRows = [], linksRows = [], downRows = [], months = [];
