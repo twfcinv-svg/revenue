@@ -701,7 +701,7 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
 
   const hint = document.getElementById(hintId);
   if (groups.size === 0) {
-    hint.textContent = '此區在選定月份沒有可用數據';
+    hint.textContent = '';
     return;
   }
 
