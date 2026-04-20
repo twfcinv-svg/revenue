@@ -120,7 +120,7 @@
     let innerTopOffset = 0; if(firstBox){ const fb = firstBox.getBoundingClientRect(); const sc = scroll.getBoundingClientRect(); innerTopOffset = pxRound(fb.top - sc.top); }
 
     const isExpanded = btn.getAttribute('aria-expanded') === 'true';
-    const marginTop = Math.max(0, topAnchor - innerTopOffset);
+    const marginTop = Math.max(-20, topAnchor - innerTopOffset);
     scroll.style.marginTop = marginTop + 'px';
 
     const targetHeight = Math.max(0, bottomAnchor - (marginTop + innerTopOffset));
