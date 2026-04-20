@@ -5,8 +5,8 @@
 }
 #icp-section .section-head,
 #combo-section .section-head {
-  padding-top: 8px;
-  padding-bottom: 8px;
+  padding-top: 0px;
+  padding-bottom: 0px;
   margin-bottom: 0px;
   margin-top:-20px;
   display: flex;
