@@ -113,14 +113,14 @@
     const chartBottom  = chartRect.bottom + (parseFloat(chartCS.marginBottom)||0);
     const legendBottom = legendRect ? legendRect.bottom : -Infinity;
 
-    const topAnchor    = pxRound(headBottom - wrapRect.top) + cssNudge('--icp-nudge-top');
-    const bottomAnchor = pxRound(Math.max(chartBottom, legendBottom) - wrapRect.top) + cssNudge('--icp-nudge-bottom');
+    const topAnchor    = pxRound(headBottom - wrapRect.top) + cssNudge('--icp-body-shift');
+    const bottomAnchor = pxRound(Math.max(chartBottom, legendBottom) - wrapRect.top) + cssNudge('--icp-body-height');
 
     const firstBox = scroll.querySelector('.icp-box');
     let innerTopOffset = 0; if(firstBox){ const fb = firstBox.getBoundingClientRect(); const sc = scroll.getBoundingClientRect(); innerTopOffset = pxRound(fb.top - sc.top); }
 
     const isExpanded = btn.getAttribute('aria-expanded') === 'true';
-    const marginTop = Math.max(-20, topAnchor - innerTopOffset);
+    const marginTop = Math.max(-32, topAnchor - innerTopOffset);
     scroll.style.marginTop = marginTop + 'px';
 
     const targetHeight = Math.max(0, bottomAnchor - (marginTop + innerTopOffset));
