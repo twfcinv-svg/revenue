@@ -1,6 +1,6 @@
 :root{
   /* 可依實際視覺微調：正值=左側往下；負值=往上 */
-  --icp-nudge-top: 3px;
+  --icp-nudge-top: 10px;
   --icp-nudge-bottom: 0px;
 }
 #icp-section .section-head, #combo-section .section-head{ margin-bottom: 8px !important; }
