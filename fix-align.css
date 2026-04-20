@@ -3,6 +3,13 @@
   --icp-nudge-top: -10px;
   --icp-nudge-bottom: 0px; /*控制表格上下寬度*/
 }
-#icp-section .section-head, #combo-section .section-head{ margin-bottom: 8px !important; }
+#icp-section .section-head,
+#combo-section .section-head {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+}
 #icp-section .icp-box{ border-radius: 8px; }
 #combo-section .chart-wrap{ padding-bottom: 8px; }
