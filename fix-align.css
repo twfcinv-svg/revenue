@@ -1,16 +1,17 @@
 :root{
-  /* 可依實際視覺微調：正值=左側往下；負值=往上 */
-  --icp-nudge-top: -10px;
-  --icp-nudge-bottom: 0px; /*控制表格上下寬度*/
+  --icp-body-height: 0px;    /* 控制表格上下長度 */
+  --icp-body-shift: 0px;     /* 控制整個表格上下移動 */
+  --icp-title-shift: 0px;    /* 控制「個股產業鏈」標題上下移動 */
 }
-#icp-section .section-head,
-#combo-section .section-head {
-  padding-top: 0px;
-  padding-bottom: 0px;
-  margin-bottom: 0px;
-  margin-top:-20px;
-  display: flex;
-  align-items: center;
+
+#icp-section .section-head {
+  margin-top: var(--icp-title-shift);
 }
-#icp-section .icp-box{ border-radius: 8px; }
-#combo-section .chart-wrap{ padding-bottom: 8px; }
+
+#icp-section .icp-box{
+  border-radius: 8px;
+}
+
+#combo-section .chart-wrap{
+  padding-bottom: 8px;
+}
