@@ -938,6 +938,20 @@ function getLatestMonthLabel(){
   return `${year}年${month}月`;
 }
 
+function getStockPageUrl(code){
+  const c = encodeURIComponent(normCode(code));
+
+  // ===== 請把下面這一行改成你實際的個股頁面網址格式 =====
+  // 如果你現在「個股產業鏈」點擊後是跳到另一個頁面，例如 stock.html?code=2330
+  // 就改成： return `./stock.html?code=${c}`;
+
+  // 如果你是跳回同一個 index 頁，但帶查詢參數
+  // 就改成： return `./index.html?stock=${c}`;
+
+  return `./index.html?stock=${c}`;
+}
+
+
 function ensureNewHighTableStyles(){
   if (document.getElementById('newHighTableInlineStyle')) return;
 
@@ -1160,23 +1174,28 @@ function renderNewHighSummary(){
     const groupStartVisibleCount = visibleStockCount;
     const groupInitiallyExpanded = groupStartVisibleCount < NEWHIGH_COLLAPSE_AFTER;
 
-    const stockRowsHtml = g.list.map(r => {
-      visibleStockCount += 1;
-      const isExtraRow = visibleStockCount > NEWHIGH_COLLAPSE_AFTER;
+  const stockRowsHtml = g.list.map(r => {
+    visibleStockCount += 1;
+    const isExtraRow = visibleStockCount > NEWHIGH_COLLAPSE_AFTER;
+    const stockUrl = getStockPageUrl(r.code);
 
-      return `
-        <tr class="stock-row ${isExtraRow ? 'extra-row' : ''}" data-industry="${safe(g.industry)}">
-          <td class="code">
-            <span class="stock-link" data-code="${safe(r.code)}">${safe(r.code)}</span>
-          </td>
-          <td class="name">
-            <span class="stock-link" data-code="${safe(r.code)}">${safe(r.name)}</span>
-          </td>
-          <td class="num">${displayPct(r.mom)}</td>
-          <td class="num">${displayPct(r.yoy)}</td>
-        </tr>
-      `;
-    }).join('');
+    return `
+      <tr class="stock-row ${isExtraRow ? 'extra-row' : ''}" data-industry="${safe(g.industry)}">
+        <td class="code">
+          <a class="stock-link" data-code="${safe(r.code)}" href="${safe(stockUrl)}">
+            ${safe(r.code)}
+          </a>
+        </td>
+        <td class="name">
+          <a class="stock-link" data-code="${safe(r.code)}" href="${safe(stockUrl)}">
+            ${safe(r.name)}
+          </a>
+        </td>
+        <td class="num">${displayPct(r.mom)}</td>
+        <td class="num">${displayPct(r.yoy)}</td>
+      </tr>
+    `;
+  }).join('');
 
     const groupHeaderHtml = `
       <tr class="group-row" data-industry="${safe(g.industry)}">
@@ -1223,19 +1242,7 @@ function renderNewHighSummary(){
     row.style.display = 'none';
   });
 
-  // 股票代號 / 名稱點擊後，帶入查詢
-  host.querySelectorAll('.stock-link').forEach(el => {
-    el.addEventListener('click', () => {
-      const code = el.dataset.code;
-      if (!code) return;
 
-      const input = document.querySelector('#stockInput');
-      if (input) {
-        input.value = code;
-        handleRun();
-      }
-    });
-  });
 
   // 每個產業自己的展開 / 收合
   host.querySelectorAll('.group-toggle').forEach(btn => {
