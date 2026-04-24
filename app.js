@@ -940,16 +940,9 @@ function getLatestMonthLabel(){
 
 function getStockPageUrl(code){
   const c = encodeURIComponent(normCode(code));
-
-  // ===== 請把下面這一行改成你實際的個股頁面網址格式 =====
-  // 如果你現在「個股產業鏈」點擊後是跳到另一個頁面，例如 stock.html?code=2330
-  // 就改成： return `./stock.html?code=${c}`;
-
-  // 如果你是跳回同一個 index 頁，但帶查詢參數
-  // 就改成： return `./index.html?stock=${c}`;
-
-  return `./index.html?stock=${c}`;
+  return `https://www.fbs.com.tw/MKT/Index?name=%EF%BC%AA%E7%B7%9A%E5%9C%96&stock=${c}`;
 }
+
 
 
 function ensureNewHighTableStyles(){
@@ -1182,12 +1175,24 @@ function renderNewHighSummary(){
     return `
       <tr class="stock-row ${isExtraRow ? 'extra-row' : ''}" data-industry="${safe(g.industry)}">
         <td class="code">
-          <a class="stock-link" data-code="${safe(r.code)}" href="${safe(stockUrl)}">
+          <a
+            class="stock-link"
+            data-code="${safe(r.code)}"
+            href="${safe(stockUrl)}"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             ${safe(r.code)}
           </a>
         </td>
         <td class="name">
-          <a class="stock-link" data-code="${safe(r.code)}" href="${safe(stockUrl)}">
+          <a
+            class="stock-link"
+            data-code="${safe(r.code)}"
+            href="${safe(stockUrl)}"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             ${safe(r.name)}
           </a>
         </td>
