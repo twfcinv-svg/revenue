@@ -58,17 +58,50 @@ function colorFor(v, mode){ if(v == null || !isFinite(v)) return '#0f172a'; cons
 function safe(s){ return z(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function isUSCode(code){ return /\.US$/i.test(String(code || '').trim()); }
 
+function interceptStockInputEnter(){
+  const input = document.querySelector('#stockInput');
+  if (!input) return;
+
+  const onEnter = (e) => {
+    // 只處理 Enter
+    if (e.key !== 'Enter') return;
+
+    // 避免中文輸入法組字時誤觸
+    if (e.isComposing || e.keyCode === 229) return;
+
+    // 關鍵：攔截預設行為與其他外部腳本
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === 'function') {
+      e.stopImmediatePropagation();
+    }
+
+    handleRun();
+  };
+
+  // 用 capture=true，盡量比後面載入的外部腳本更早攔截
+  input.addEventListener('keydown', onEnter, true);
+  input.addEventListener('keypress', onEnter, true);
+}
+
 window.addEventListener('DOMContentLoaded', async () => {
   try {
     await loadWorkbook();
     initControls();
-    renderNewHighSummary(); 
-    
+    renderNewHighSummary();
+
+    // 新增：攔截股票輸入框 Enter，改成直接查詢，不讓頁面跳走
+    interceptStockInputEnter();
+
   } catch (e) {
     console.error(e);
     alert('載入失敗：' + e.message);
   }
-  document.querySelector('#runBtn')?.addEventListener('click', handleRun);
+
+  document.querySelector('#runBtn')?.addEventListener('click', (e) => {
+    e.preventDefault?.();
+    handleRun();
+  });
 });
 
 
