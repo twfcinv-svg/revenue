@@ -77,31 +77,43 @@ function triggerUnifiedQuery(){
   handleRun();
 }
 
-function interceptStockInputEnter(){
-  const input = document.querySelector('#stockInput');
-  if (!input) return;
+function interceptQueryControlsEnter(){
+  const targets = [
+    '#stockInput',
+    '#monthSelect',
+    '#metricSelect',
+    '#colorMode'   // 如果頁面上沒有這個元素也沒關係
+  ];
 
   const onEnter = (e) => {
-    // 只處理 Enter
     if (e.key !== 'Enter') return;
-
-    // 避免中文輸入法組字時誤觸
     if (e.isComposing || e.keyCode === 229) return;
 
-    // 攔截預設行為與其他外部腳本
     e.preventDefault();
     e.stopPropagation();
     if (typeof e.stopImmediatePropagation === 'function') {
       e.stopImmediatePropagation();
     }
 
-    // 改成「模擬按查詢按鈕」
-    triggerUnifiedQuery();
+    // 讓下拉選單先失焦，避免 Enter 只是在開/關選單
+    if (typeof e.currentTarget?.blur === 'function') {
+      e.currentTarget.blur();
+    }
+
+    // 下一個 frame 再查詢，確保 select 的值已更新
+    requestAnimationFrame(() => {
+      triggerUnifiedQuery();
+    });
   };
 
-  // 用 capture=true，盡量比後面載入的外部腳本更早攔截
-  input.addEventListener('keydown', onEnter, true);
-  input.addEventListener('keypress', onEnter, true);
+  targets.forEach(selector => {
+    const el = document.querySelector(selector);
+    if (!el) return;
+
+    // 用 capture=true，盡量比其他外部腳本更早攔截
+    el.addEventListener('keydown', onEnter, true);
+    el.addEventListener('keypress', onEnter, true);
+  });
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
@@ -110,8 +122,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     initControls();
     renderNewHighSummary();
 
-    // 新增：攔截股票輸入框 Enter，改成直接查詢，不讓頁面跳走
-    interceptStockInputEnter();
+    // 改成：攔截所有查詢欄位的 Enter
+    interceptQueryControlsEnter();
 
   } catch (e) {
     console.error(e);
@@ -945,7 +957,7 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
         const input = document.querySelector('#stockInput');
         if (input) input.value = code;
 
-        handleRun();
+        triggerUnifiedQuery();
       });
   }
 
