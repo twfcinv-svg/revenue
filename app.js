@@ -58,6 +58,25 @@ function colorFor(v, mode){ if(v == null || !isFinite(v)) return '#0f172a'; cons
 function safe(s){ return z(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function isUSCode(code){ return /\.US$/i.test(String(code || '').trim()); }
 
+function triggerUnifiedQuery(){
+  const input = document.querySelector('#stockInput');
+  if (input) {
+    // 讓其他可能監聽 input/change 的腳本也收到更新
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  const btn = document.querySelector('#runBtn');
+  if (btn) {
+    // 關鍵：模擬按下查詢按鈕，讓其他檔案綁在 click 的邏輯一起跑
+    btn.click();
+    return;
+  }
+
+  // 保底
+  handleRun();
+}
+
 function interceptStockInputEnter(){
   const input = document.querySelector('#stockInput');
   if (!input) return;
@@ -69,14 +88,15 @@ function interceptStockInputEnter(){
     // 避免中文輸入法組字時誤觸
     if (e.isComposing || e.keyCode === 229) return;
 
-    // 關鍵：攔截預設行為與其他外部腳本
+    // 攔截預設行為與其他外部腳本
     e.preventDefault();
     e.stopPropagation();
     if (typeof e.stopImmediatePropagation === 'function') {
       e.stopImmediatePropagation();
     }
 
-    handleRun();
+    // 改成「模擬按查詢按鈕」
+    triggerUnifiedQuery();
   };
 
   // 用 capture=true，盡量比後面載入的外部腳本更早攔截
