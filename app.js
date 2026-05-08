@@ -402,9 +402,16 @@ function renderResultChip(selfRow, month, metric, colorMode){
 
   host.innerHTML = `
     <div class="result-card" style="background:${bg}">
-      <div class="row1"><strong>${safe(showCode)}｜${safe(showName)}</strong><span>${metric}</span></div>
-      <div class="row2">  <strong class="industry">${safe(selfRow['產業別'] || '')}</strong><strong class="value">${displayPct(v)}</strong></div>
-    </div>`;
+      <div class="row1">
+        <strong style="color:#ffffff; font-weight:700;">${safe(showCode)}｜${safe(showName)}</strong>
+        <strong style="color:#ffffff; font-weight:700;">${metric}</strong>
+      </div>
+      <div class="row2">
+        <strong style="color:#ffffff; font-weight:700;">${safe(selfRow['產業別'] || '')}</strong>
+        <strong style="color:#ffffff; font-weight:700;">${displayPct(v)}</strong>
+      </div>
+    </div>
+  `;
 }
 
 // ========= 個股標籤適配 =========
