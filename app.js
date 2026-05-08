@@ -47,7 +47,9 @@ let byCode = new Map();
 let byName = new Map();
 let linksByUp = new Map();
 let linksByDown = new Map();
+let upstreamHJ = [];    // ✅ 新增：左邊「上游產業熱力圖」專用（DownLinks G/H/I）
 let downstreamHJ = [];
+
 
 function z(s){ return String(s == null ? '' : s); }
 function toHalfWidth(str){ return z(str).replace(/[０-９Ａ-Ｚａ-ｚ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)); }
@@ -203,7 +205,7 @@ async function loadWorkbook(){
   linksByUp.clear();
   linksByDown.clear();
 
-  // ===== Links（左邊上游）=====
+  // ===== Links（保留原本資料結構，避免其他功能受影響）=====
   for (const e of linksRows) {
     const A = normCode(e['上游代號']);
     const B = normCode(e['下游代號']);
@@ -218,7 +220,27 @@ async function loadWorkbook(){
     }
   }
 
+  // ===== DownLinks（左邊上游熱力圖專用：讀 G/H/I 欄）=====
+  // G = 上游代號_熱力圖上
+  // H = 下游代號_熱力圖上
+  // I = 關係類型__熱力圖上
+  upstreamHJ = [];
+  for (const row of downRows) {
+    const up = normCode(row['上游代號_熱力圖上']);
+    const down = normCode(row['下游代號_熱力圖上']);
+    const type = normText(row['關係類型__熱力圖上']);
+
+    if (up && down && type) {
+      upstreamHJ.push({
+        '上游代號': up,
+        '下游代號': down,
+        '關係類型': type
+      });
+    }
+  }
+
   // ===== DownLinks（右邊下游）=====
+  // 如果你右邊下游圖目前已經正常，就保留這段不動
   downstreamHJ = [];
   for (const row of downRows) {
     const up = normCode(row['上游代號']);
@@ -235,7 +257,9 @@ async function loadWorkbook(){
   }
 
   console.log("Links 筆數 =", linksRows.length);
-  console.log("DownLinks 筆數 =", downstreamHJ.length);
+  console.log("上游熱力圖 DownLinks(GHI) 筆數 =", upstreamHJ.length);
+  console.log("右側下游圖 DownLinks(ABC) 筆數 =", downstreamHJ.length);
+
 }
 
 function initControls(){
@@ -342,8 +366,9 @@ function handleRun(){
     if (window.setResultChipLink) window.setResultChipLink(codeLabel, nameLabel, extra);
   } catch (_) {}
 
-  const upstreamEdges = linksByDown.get(codeKey) || [];
+  const upstreamEdges = upstreamHJ.filter(e => e['下游代號'] === codeKey);
   let downstreamEdges = downstreamHJ.filter(e => e['上游代號'] === codeKey);
+
 
   downstreamEdges = downstreamEdges.filter(e => !String(e['下游代號']).endsWith('.US'));
 
