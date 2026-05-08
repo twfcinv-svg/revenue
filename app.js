@@ -401,12 +401,12 @@ function renderResultChip(selfRow, month, metric, colorMode){
   const showName = selfRow['名稱'] || selfRow['公司名稱'] || selfRow['證券名稱'] || '';
 
   host.innerHTML = `
-    <div class="result-card" style="background:${bg}">
-      <div class="row1">
+    <div class="result-card" style="background:${bg};">
+      <div class="row1" style="color:#ffffff; opacity:1;">
         <strong style="color:#ffffff; font-weight:700;">${safe(showCode)}｜${safe(showName)}</strong>
         <strong style="color:#ffffff; font-weight:700;">${metric}</strong>
       </div>
-      <div class="row2">
+      <div class="row2" style="color:#ffffff; opacity:1;">
         <strong style="color:#ffffff; font-weight:700;">${safe(selfRow['產業別'] || '')}</strong>
         <strong style="color:#ffffff; font-weight:700;">${displayPct(v)}</strong>
       </div>
