@@ -402,8 +402,8 @@ function renderResultChip(selfRow, month, metric, colorMode){
 
   host.innerHTML = `
     <div class="result-card" style="background:${bg}">
-      <div class="row1"><strong>${safe(showCode)}｜${safe(showName)}</strong><span>${month.slice(0,4)}/${month.slice(4,6)} / ${metric}</span></div>
-      <div class="row2"><span>${safe(selfRow['產業別'] || '')}</span><span>${displayPct(v)}</span></div>
+      <div class="row1"><strong>${safe(showCode)}｜${safe(showName)}</strong><span>${metric}</span></div>
+      <div class="row2">  <strong class="industry">${safe(selfRow['產業別'] || '')}</strong><strong class="value">${displayPct(v)}</strong></div>
     </div>`;
 }
 
