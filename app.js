@@ -41,7 +41,7 @@ const MIN_RENDER_AREA = 400;       // 個股最小面積（小於則不顯示）
 const NEWHIGH_COLLAPSE_AFTER = 0; // 營收創新高表格，預設先顯示前 15 檔
 
 
-let revenueRows = [], linksRows = [], downRows = [], months = [];
+let revenueRows = [], linksRows = [], downRows = [], downRowsRaw = [], months = [];
 let newHighSheetRows = [];
 let byCode = new Map();
 let byName = new Map();
@@ -184,6 +184,10 @@ async function loadWorkbook(){
   revenueRows = XLSX.utils.sheet_to_json(wsRev,   { defval:null });
   linksRows   = XLSX.utils.sheet_to_json(wsLinks, { defval:null });
   downRows    = wsDown ? XLSX.utils.sheet_to_json(wsDown, { defval:null }) : [];
+  downRowsRaw = wsDown ? XLSX.utils.sheet_to_json(wsDown, { header:1, defval:'', blankrows:false }) : [];
+
+
+  
   newHighSheetRows = wsNewHigh
   ? XLSX.utils.sheet_to_json(wsNewHigh, { header: 1, defval: '', blankrows: false, raw: false })
   : [];
@@ -220,15 +224,17 @@ async function loadWorkbook(){
     }
   }
 
-  // ===== DownLinks（左邊上游熱力圖專用：讀 G/H/I 欄）=====
-  // G = 上游代號_熱力圖上
-  // H = 下游代號_熱力圖上
-  // I = 關係類型__熱力圖上
+
+// ===== DownLinks（左邊上游熱力圖專用：直接讀 G/H/I 欄）=====
+  // G欄 index=6：上游代號_熱力圖上
+  // H欄 index=7：下游代號_熱力圖上
+  // I欄 index=8：關係類型_熱力圖上 / 關係類型__熱力圖上
   upstreamHJ = [];
-  for (const row of downRows) {
-    const up = normCode(row['上游代號_熱力圖上']);
-    const down = normCode(row['下游代號_熱力圖上']);
-    const type = normText(row['關係類型_熱力圖上']);
+
+  for (const row of downRowsRaw.slice(1)) {   // 略過標題列
+    const up = normCode(row[6]);    // G
+    const down = normCode(row[7]);  // H
+    const type = normText(row[8]);  // I
 
     if (up && down && type) {
       upstreamHJ.push({
@@ -799,8 +805,12 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
   const allSummaries = [];
 
   for (const [rel, list] of groups) {
-    const avg = d3.mean(list, d => Number.isFinite(d.raw) ? d.raw : null);
-    const minLeafRaw = d3.min(list.map(d => Number.isFinite(d.raw) ? d.raw : 0));
+    const validVals = list
+      .map(d => d.raw)
+      .filter(v => Number.isFinite(v));
+
+    const avg = validVals.length ? d3.mean(validVals) : 0;
+    const minLeafRaw = validVals.length ? d3.min(validVals) : 0;
 
     const baseValues = list.map(s => {
       const valNum = Number.isFinite(s.raw) ? s.raw : minLeafRaw;
@@ -815,7 +825,7 @@ function renderTreemap(svgId, hintId, edges, codeField, month, metric, colorMode
       avg,
       baseValues,
       baseSum
-    });
+    }); 
   }
 
   // ★ 上游：依平均值挑前 GROUP_KEEP_MAX 個類股
