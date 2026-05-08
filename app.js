@@ -228,7 +228,7 @@ async function loadWorkbook(){
   for (const row of downRows) {
     const up = normCode(row['上游代號_熱力圖上']);
     const down = normCode(row['下游代號_熱力圖上']);
-    const type = normText(row['關係類型__熱力圖上']);
+    const type = normText(row['關係類型_熱力圖上']);
 
     if (up && down && type) {
       upstreamHJ.push({
