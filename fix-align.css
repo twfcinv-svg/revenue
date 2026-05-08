@@ -15,3 +15,30 @@
 #combo-section .chart-wrap{
   padding-bottom: 8px;
 }
+
+/* ===== 查詢結果卡片（#resultChip）樣式修正 ===== */
+#resultChip .result-card .row1,
+#resultChip .result-card .row2 {
+  color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+#resultChip .result-card .row1 strong,
+#resultChip .result-card .row2 strong,
+#resultChip .result-card .row1 span,
+#resultChip .result-card .row2 span {
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+
+/* 第二行（類股 / 數值）特別強制為白色、粗體 */
+#resultChip .result-card .row2 {
+  color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+#resultChip .result-card .row2 strong,
+#resultChip .result-card .row2 span {
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
